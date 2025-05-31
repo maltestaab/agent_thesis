@@ -51,22 +51,22 @@ event_broadcaster = StreamEventBroadcaster()
 
 
 def as_tool_enhanced(agent: Agent, tool_name: str, tool_description: str, max_turns: int = 25):
-    """
-    Enhanced version of as_tool() with max_turns and streaming support.
+    """Enhanced version with reasoning filtering"""
     
-    Args:
-        agent: The agent to convert to a tool
-        tool_name: Name of the tool
-        tool_description: Description of what the tool does
-        max_turns: Maximum turns for the agent (default 25)
-    """
+    def is_json_like(text: str) -> bool:
+        """Check if text looks like JSON structured output"""
+        text = text.strip()
+        return (text.startswith('{') and 
+                'phase' in text and 
+                'summary' in text and
+                'key_findings' in text)
     
     @function_tool(
         name_override=tool_name,
         description_override=tool_description,
     )
     async def run_agent_enhanced(context: RunContextWrapper, input: str) -> str:
-        """Run agent with streaming and broadcasting support"""
+        """Run agent with streaming and reasoning filtering"""
         
         # Broadcast that this sub-agent is starting
         if event_broadcaster.queue:
@@ -79,7 +79,6 @@ def as_tool_enhanced(agent: Agent, tool_name: str, tool_description: str, max_tu
                 )
             )
         
-        # Use run_streamed with higher max_turns
         result = Runner.run_streamed(
             agent,
             input=input,
@@ -87,9 +86,9 @@ def as_tool_enhanced(agent: Agent, tool_name: str, tool_description: str, max_tu
             max_turns=max_turns
         )
         
-        # Stream sub-agent events and broadcast them
+        # Stream sub-agent events with JSON filtering
         async for event in result.stream_events():
-            # Check for cancellation - but don't yield, just return
+            # Check for cancellation
             if getattr(st.session_state, 'cancel_analysis', False):
                 result.cancel()
                 if event_broadcaster.queue:
@@ -141,12 +140,26 @@ def as_tool_enhanced(agent: Agent, tool_name: str, tool_description: str, max_tu
                     )
                     
                 elif event.item.type == "message_output_item":
+                    # FILTER JSON FROM REASONING
                     message_text = ItemHelpers.text_message_output(event.item)
-                    if message_text.strip():
+                    
+                    # Skip if this looks like structured JSON output
+                    if is_json_like(message_text):
+                        # Instead of showing raw JSON, show a clean completion message
+                        await event_broadcaster.broadcast_event(
+                            StreamingEvent(
+                                event_type="agent_result",
+                                content=f"✅ {agent.name} completed analysis and provided structured results",
+                                timestamp=current_time,
+                                agent_name=agent.name
+                            )
+                        )
+                    elif message_text.strip():
+                        # This is actual reasoning - show it
                         await event_broadcaster.broadcast_event(
                             StreamingEvent(
                                 event_type="agent_reasoning",
-                                content=f"💭 {agent.name}: {message_text}",
+                                content=f"🤔 {agent.name}: {message_text}",
                                 timestamp=current_time,
                                 agent_name=agent.name
                             )
