@@ -191,23 +191,11 @@ if uploaded_file:
 # Analysis request section
 st.subheader("🎯 Analysis Request")
 
-# Preset prompts
-example_prompts = {
-    "Predictive Modeling": "Build a predictive model to forecast the target variable and identify the most important features.",
-    "Exploratory Analysis": "Perform comprehensive exploratory data analysis and identify key patterns and insights.",
-    "Classification Task": "Build a classification model and evaluate its performance with appropriate metrics.",
-    "Feature Analysis": "Analyze which features are most important and how they relate to the target variable.",
-    "Custom Analysis": ""
-}
-
-# Prompt selection
-selected_example = st.selectbox("Choose example or write custom", list(example_prompts.keys()))
-default_prompt = example_prompts[selected_example] if selected_example != "Custom Analysis" else ""
 
 # Analysis prompt input
 user_prompt = st.text_area(
     "Describe your analysis needs",
-    value=default_prompt,
+    value="Please insert your prompt here.",
     height=100,
     help="Be specific about what insights you're looking for"
 )

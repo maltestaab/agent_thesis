@@ -1,5 +1,5 @@
 """
-data_science_agents/agent_systems/single_agent.py - Single agent system with streaming
+data_science_agents/agent_systems/single_agent.py - Single agent system with flexible CRISP-DM
 """
 import time
 from typing import AsyncGenerator

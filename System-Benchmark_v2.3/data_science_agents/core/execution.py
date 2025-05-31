@@ -1,5 +1,5 @@
 """
-data_science_agents/core/execution.py - Execution engine with context support
+data_science_agents/core/execution.py - Improved execution engine with cleaner code
 """
 import pandas as pd
 import numpy as np
@@ -22,7 +22,7 @@ warnings.filterwarnings('ignore')
 IMAGES_DIR = "Images"
 os.makedirs(IMAGES_DIR, exist_ok=True)
 
-# Simple global state for code execution - much simpler than complex classes
+# Simple global state for code execution
 execution_namespace = {
     'pd': pd,
     'np': np, 
@@ -31,7 +31,7 @@ execution_namespace = {
     'sns': sns
 }
 
-# List to track created images - simple list instead of complex tracking
+# List to track created images
 created_images = []
 
 
@@ -53,100 +53,142 @@ def reset_execution_state():
     created_images.clear()
 
 
-def detect_saved_csv_filename(code: str) -> str | None:
-    """Simple CSV file detection for df.to_csv(...) calls."""
-    match = re.search(r'\.to_csv\(\s*["\'](.+?\.csv)["\']', code)
-    return match.group(1) if match else None
-
-
 @function_tool
 def execute_code(ctx: RunContextWrapper, code: str) -> str:
     """
-    Execute Python code with context awareness to avoid redundant work.
-    
-    This tool:
-    1. Can access previous work via the context to avoid re-execution
-    2. Executes provided code in a shared namespace
-    3. Captures any printed output
-    4. Tracks any images saved to the Images/ folder
-    5. Returns the output and image information
+    Execute Python code with context awareness.
     
     Args:
-        ctx: Context wrapper containing analysis state and previous results
+        ctx: Analysis context for state management  
         code: Python code to execute
         
     Returns:
-        String containing execution results and any output
+        Execution results and output
     """
     try:
-        # Access context if available (some agents might not use context)
-        context_info = ""
-        if hasattr(ctx, 'context') and ctx.context:
-            # Provide helpful context information in code comments
-            available_vars = ctx.context.get_available_variables()
-            if available_vars:
-                var_list = ", ".join(available_vars.keys())
-                context_info = f"# Available variables: {var_list}\n"
-            
-            # Add previous results info if this is multi-agent
-            if ctx.context.analysis_type == "multi_agent" and ctx.context.agent_results:
-                context_info += f"# Previous phases completed: {', '.join(ctx.context.completed_phases)}\n"
+        # Build clean context info
+        context_info = _build_context_info(ctx)
         
-        # Track images before execution to see what's new
-        images_before = set()
-        if os.path.exists(IMAGES_DIR):
-            images_before = set(os.listdir(IMAGES_DIR))
+        # Track images before execution
+        images_before = _get_current_images()
         
-        # Capture printed output using string buffer
-        old_stdout = sys.stdout
-        sys.stdout = captured_output = io.StringIO()
+        # Execute code with output capture
+        output = _execute_with_capture(code)
         
-        try:
-            # Execute the code in our shared namespace
-            # Add context info as comments so model can see what's available
-            full_code = context_info + code if context_info else code
-            exec(full_code, execution_namespace)  # Execute original code, not with comments
-            
-            # Get any printed output
-            output = captured_output.getvalue()
-
-        finally:
-            # Always restore stdout
-            sys.stdout = old_stdout
+        # Handle new images
+        new_images = _track_new_images(images_before)
         
-        # Check for new images created
-        images_after = set()
-        if os.path.exists(IMAGES_DIR):
-            images_after = set(os.listdir(IMAGES_DIR))
-        
-        new_images = images_after - images_before
-        
-        # Update our global image tracking
-        for img in sorted(new_images):
-            img_path = os.path.join(IMAGES_DIR, img)
-            if img_path not in created_images:
-                created_images.append(img_path)
-        
-        # Build result message
-        result_parts = []
-        
-        # Add context info if helpful
-        if context_info:
-            result_parts.append("Context information was available to guide execution.")
-        
-        if output.strip():
-            result_parts.append(output.strip())
-        
-        if new_images:
-            result_parts.append(f"Created {len(new_images)} new image(s): {', '.join(sorted(new_images))}")
-        
-        return '\n'.join(result_parts) if result_parts else "Code executed successfully (no output)"
+        # Build and return result
+        return _format_result(output, new_images, context_info)
         
     except Exception as e:
-        # Simple error handling - just return the error message and traceback
-        error_msg = f"Error: {str(e)}"
-        tb = traceback.format_exc()
-        return f"{error_msg}\n\nTraceback:\n{tb}"
+        return _format_error(e)
+
+
+def _build_context_info(ctx: RunContextWrapper) -> str:
+    """Build clean context information string."""
+    if not hasattr(ctx, 'context') or not ctx.context:
+        return ""
+    
+    try:
+        available_vars = ctx.context.get_available_variables()
+        if not available_vars:
+            return ""
+        
+        # Simple, clean context
+        var_names = list(available_vars.keys())
+        if len(var_names) <= 3:
+            return f"# Available: {', '.join(var_names)}\n"
+        else:
+            return f"# Available: {', '.join(var_names[:3])}, +{len(var_names)-3} more\n"
+    
+    except Exception:
+        return ""
+
+
+def _get_current_images() -> set:
+    """Get current set of images in the Images directory."""
+    if not os.path.exists(IMAGES_DIR):
+        return set()
+    return set(os.listdir(IMAGES_DIR))
+
+
+def _execute_with_capture(code: str) -> str:
+    """Execute code and capture printed output."""
+    # Capture stdout
+    old_stdout = sys.stdout
+    captured_output = io.StringIO()
+    
+    try:
+        sys.stdout = captured_output
+        exec(code, execution_namespace)
+        return captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+
+def _track_new_images(images_before: set) -> list:
+    """Track and register new images created during execution."""
+    images_after = _get_current_images()
+    new_images = sorted(images_after - images_before)
+    
+    # Update global tracking
+    for img in new_images:
+        img_path = os.path.join(IMAGES_DIR, img)
+        if img_path not in created_images:
+            created_images.append(img_path)
+    
+    return new_images
+
+
+def _format_result(output: str, new_images: list, context_info: str) -> str:
+    """Format the execution result consistently."""
+    result_parts = []
+    
+    # Add context note if available  
+    if context_info:
+        result_parts.append("# Context loaded for execution")
+    
+    # Add main output
+    if output.strip():
+        result_parts.append(output.strip())
+    
+    # Add image info
+    if new_images:
+        if len(new_images) == 1:
+            result_parts.append(f"Created: {new_images[0]}")
+        else:
+            result_parts.append(f"Created {len(new_images)} images: {', '.join(new_images)}")
+    
+    # Return formatted result or default message
+    if result_parts:
+        return '\n'.join(result_parts)
+    else:
+        return "Code executed successfully (no output)"
+
+
+def _format_error(error: Exception) -> str:
+    """Format error messages for better debugging."""
+    error_type = type(error).__name__
+    error_msg = str(error)
+    
+    # Get clean traceback
+    tb_lines = traceback.format_exc().split('\n')
+    # Filter out internal execution lines, keep only relevant ones
+    relevant_tb = []
+    for line in tb_lines:
+        if 'exec(code, execution_namespace)' in line:
+            continue
+        if line.strip():
+            relevant_tb.append(line)
+    
+    # Build clean error message
+    result = f"Error ({error_type}): {error_msg}"
+    
+    if len(relevant_tb) > 3:  # Only add traceback if it's useful
+        result += f"\n\nTraceback:\n" + '\n'.join(relevant_tb[-3:])  # Last 3 lines
+    
+    return result
 
 
 def get_created_images():
@@ -156,19 +198,22 @@ def get_created_images():
 
 def get_available_variables():
     """Get dictionary of available variables in the execution namespace"""
-    # Return only user-created variables (not the core imports)
     user_vars = {}
+    core_imports = {'pd', 'np', 'stats', 'plt', 'sns'}
+    
     for name, value in execution_namespace.items():
-        if not name.startswith('_') and name not in ['pd', 'np', 'stats', 'plt', 'sns']:
-            try:
-                # Get a simple description of the variable
-                if hasattr(value, 'shape'):
-                    user_vars[name] = f"{type(value).__name__} with shape {value.shape}"
-                elif hasattr(value, '__len__') and not isinstance(value, str):
-                    user_vars[name] = f"{type(value).__name__} with {len(value)} items"
-                else:
-                    user_vars[name] = type(value).__name__
-            except:
+        if name.startswith('_') or name in core_imports:
+            continue
+            
+        try:
+            # Get concise variable description
+            if hasattr(value, 'shape'):
+                user_vars[name] = f"{type(value).__name__}({value.shape})"
+            elif hasattr(value, '__len__') and not isinstance(value, str):
+                user_vars[name] = f"{type(value).__name__}[{len(value)}]"
+            else:
                 user_vars[name] = type(value).__name__
+        except Exception:
+            user_vars[name] = type(value).__name__
     
     return user_vars
