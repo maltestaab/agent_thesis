@@ -1,3 +1,7 @@
+"""
+setup.py - Setup script for the data science agents
+"""
+
 from setuptools import setup, find_packages
 
 setup(
@@ -9,13 +13,7 @@ setup(
         "numpy",
         "scipy",
         "scikit-learn",
-        "asyncio",
-        "streamlit",
-        "plotly",
-        "openpyxl",
-        "python-dotenv",
-        "nest-asyncio",
-        "agents"
+        "asyncio"
     ],
     python_requires=">=3.7",
 ) 
