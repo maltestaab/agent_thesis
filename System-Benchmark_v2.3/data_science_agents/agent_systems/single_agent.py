@@ -142,4 +142,15 @@ async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int 
 
             # Don't include the streaming content in final output - show clean final result
             yield StreamingEvent(
-                event_type="analysi
+                event_type="analysis_complete",
+                content=result.final_output,  # Just the clean final output
+                timestamp=time.time()
+            )
+            
+    except Exception as e:
+        # Simple error handling - yield error event
+        yield StreamingEvent(
+            event_type="analysis_error",
+            content=f"❌ Analysis failed: {str(e)}",
+            timestamp=time.time()
+        )

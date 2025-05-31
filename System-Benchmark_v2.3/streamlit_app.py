@@ -311,6 +311,11 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                         # Multi-agent handoff
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
                         tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(tool_events[-3:])}</div>', unsafe_allow_html=True)
+
+                    elif event.event_type == "agent_result":
+                        # Clean agent completion message
+                        tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
+                        tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(tool_events[-3:])}</div>', unsafe_allow_html=True)
                     
                     elif event.event_type == "message_complete":
                         # Complete message - reset for next thinking block
@@ -344,4 +349,22 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                     
                 elif event.event_type == "analysis_error":
                     st.session_state.analysis_running = False
-                    st.er
+                    st.error(event.content)
+                    return
+                    
+                elif event.event_type == "analysis_cancelled":
+                    st.session_state.analysis_running = False
+                    st.warning(event.content)
+                    return
+                    
+        except Exception as e:
+            st.error(f"Streaming analysis failed: {str(e)}")
+            st.session_state.analysis_running = False
+    
+    # Run streaming analysis
+    try:
+        asyncio.run(run_streaming_analysis())
+    except Exception as e:
+        st.error(f"Error running analysis: {str(e)}")
+        st.session_state.analysis_running = False
+        st.session_state.cancel_analysis = False
