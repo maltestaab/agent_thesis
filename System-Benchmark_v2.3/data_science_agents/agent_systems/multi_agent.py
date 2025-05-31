@@ -107,27 +107,27 @@ orchestration_agent = Agent[AnalysisContext](
         # This is much simpler than the previous custom wrapper approach
         business_understanding_agent.as_tool(
             tool_name="business_understanding_agent",
-            tool_description="Handles business understanding: defines objectives, success criteria, and project approach. Returns structured AgentResult."
+            tool_description="Handles business understanding: defines objectives, success criteria, and project approach. Returns structured AgentResult. Must specify input_file_used and output_file_created in response."
         ),
         data_understanding_agent.as_tool(
             tool_name="data_understanding_agent",
-            tool_description="Handles data understanding: loads data, explores structure, checks quality. Returns structured AgentResult with data info."
+            tool_description="Handles data understanding: loads data, explores structure, checks quality. Returns structured AgentResult with data info. Must specify input_file_used and output_file_created in response."
         ),
         data_preparation_agent.as_tool(
             tool_name="data_preparation_agent",
-            tool_description="Handles data preparation: cleans data, creates features, prepares for modeling. Returns structured AgentResult."
+            tool_description="Handles data preparation: cleans data, creates features, prepares for modeling. Returns structured AgentResult. Must specify input_file_used and output_file_created in response."
         ),
         modeling_agent.as_tool(
             tool_name="modeling_agent",
-            tool_description="Handles modeling: builds and evaluates models. Returns structured AgentResult with performance metrics."
+            tool_description="Handles modeling: builds and evaluates models. Returns structured AgentResult with performance metrics. Must specify input_file_used and output_file_created in response."
         ),
         evaluation_agent.as_tool(
             tool_name="evaluation_agent",
-            tool_description="Handles evaluation: assesses results against business criteria, provides insights. Returns structured AgentResult."
+            tool_description="Handles evaluation: assesses results against business criteria, provides insights. Returns structured AgentResult. Must specify input_file_used and output_file_created in response."
         ),
         deployment_agent.as_tool(
             tool_name="deployment_agent",
-            tool_description="Handles deployment planning: creates deployment strategy and documentation. Returns structured AgentResult."
+            tool_description="Handles deployment planning: creates deployment strategy and documentation. Returns structured AgentResult. Must specify input_file_used and output_file_created in response."
         )
     ]
 )
@@ -255,15 +255,4 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
             yield StreamingEvent(
                 event_type="analysis_complete",
                 content=f"✅ Multi-agent analysis completed in {total_duration:.1f}s!\n\n📊 Final Results:\n{result.final_output}\n\n📸 Created {len(images)} visualizations",
-                timestamp=time.time(),
-                agent_name="Orchestrator"
-            )
-            
-    except Exception as e:
-        # Simple error handling - yield error event
-        yield StreamingEvent(
-            event_type="analysis_error",
-            content=f"❌ Multi-agent analysis failed: {str(e)}",
-            timestamp=time.time(),
-            agent_name=current_agent
-        )
+ 

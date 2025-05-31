@@ -190,14 +190,15 @@ ORCHESTRATOR_ENHANCED = (
     "  - next_phase_recommendation: Suggested next step"
     "- Extract and use this information when calling the next agent"
     "\n\n"
-    "CONTEXT PASSING PROTOCOL:"
-    "When calling each agent, provide clear context:"
+   "CONTEXT PASSING PROTOCOL:"
+    "When calling each agent, provide clear context with explicit file name:"
     "```"
+    "**CURRENT FILE**: Use exactly this file: `{{current_filename}}`"
     "Based on [Previous Phase] findings:"
     "- [Key findings and metrics]"    
     "- Available data: [list variables with descriptions]"
     "- Created visualizations: [list images]"
-    "Build upon the existing work. Use the existing data file(s) for data operations."
+    "Build upon the existing work."
     "```"
     "\n\n"
     "FLEXIBLE WORKFLOW MANAGEMENT:"
@@ -246,6 +247,9 @@ BUSINESS_UNDERSTANDING_ENHANCED = (
     "Once you complete business understanding, provide your structured output with business objectives, "
     "success criteria, data mining goals, constraints, and initial project approach. "
     "Do not proceed to data analysis - that's not your responsibility."
+    "CRITICAL: In your output, specify:"
+    "- input_file_used: The exact file name you loaded/used"
+    "- output_file_created: The exact file name you saved (if any), or empty string"
 )
 
 DATA_UNDERSTANDING_ENHANCED = (
@@ -276,6 +280,9 @@ DATA_UNDERSTANDING_ENHANCED = (
     "If necessary, load the file name passed to you from previous phases. Do not assume the filename — it is provided."
     "If you create a new version of the dataset (e.g., cleaned or transformed), you MUST save it using `df.to_csv('new_filename.csv', index=False)` or similar"
     "Mention the exact filename in your summary so it can be used in the next phase"
+    "CRITICAL: In your output, specify:"
+    "- input_file_used: The exact file name you loaded/used"
+    "- output_file_created: The exact file name you saved (if any), or empty string"
 )
 
 DATA_PREPARATION_ENHANCED = (
@@ -308,6 +315,9 @@ DATA_PREPARATION_ENHANCED = (
     "If necessary, load the file name passed to you from previous phases. Do not assume the filename — it is provided."
     "If you create a new version of the dataset (e.g., cleaned or transformed), you MUST save it using `df.to_csv('new_filename.csv', index=False)` or similar"
     "Mention the exact filename in your summary so it can be used in the next phase"
+    "CRITICAL: In your output, specify:"
+    "- input_file_used: The exact file name you loaded/used"
+    "- output_file_created: The exact file name you saved (if any), or empty string"
 )
 
 MODELING_ENHANCED = (
@@ -349,6 +359,9 @@ MODELING_ENHANCED = (
     "If necessary, load the file name passed to you from previous phases. Do not assume the filename — it is provided."
     "If you create a new version of the dataset (e.g., cleaned or transformed), you MUST save it using `df.to_csv('new_filename.csv', index=False)` or similar"
     "Mention the exact filename in your summary so it can be used in the next phase"
+    "CRITICAL: In your output, specify:"
+    "- input_file_used: The exact file name you loaded/used"
+    "- output_file_created: The exact file name you saved (if any), or empty string"
 )
 
 EVALUATION_ENHANCED = (
@@ -392,6 +405,9 @@ EVALUATION_ENHANCED = (
     "3. Makes actionable recommendations"
     "4. Determines if the solution is ready for deployment"
     "Your output will be automatically structured."
+    "CRITICAL: In your output, specify:"
+    "- input_file_used: The exact file name you loaded/used"
+    "- output_file_created: The exact file name you saved (if any), or empty string"
 )
 
 DEPLOYMENT_ENHANCED = (
@@ -421,4 +437,7 @@ DEPLOYMENT_ENHANCED = (
     "Create concise deployment guidance. Your output will be automatically structured."
     "Your output should include: deployment plan, monitoring strategy, final report, and project documentation."
     "This is the final CRISP-DM phase."
+    "CRITICAL: In your output, specify:"
+    "- input_file_used: The exact file name you loaded/used"
+    "- output_file_created: The exact file name you saved (if any), or empty string"
 )

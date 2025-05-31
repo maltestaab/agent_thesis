@@ -14,6 +14,8 @@ class AgentResult(BaseModel):
     images_created: list[str]
     next_phase_recommendation: str
     phase_complete: bool
+    input_file_used: str
+    output_file_created: str = ""
 
 
 class AnalysisMetrics(BaseModel):

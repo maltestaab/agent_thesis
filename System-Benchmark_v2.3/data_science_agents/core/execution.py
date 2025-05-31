@@ -210,10 +210,4 @@ def get_available_variables():
             if hasattr(value, 'shape'):
                 user_vars[name] = f"{type(value).__name__}({value.shape})"
             elif hasattr(value, '__len__') and not isinstance(value, str):
-                user_vars[name] = f"{type(value).__name__}[{len(value)}]"
-            else:
-                user_vars[name] = type(value).__name__
-        except Exception:
-            user_vars[name] = type(value).__name__
-    
-    return user_vars
+                user_vars[name] = f"{type(value).__na
