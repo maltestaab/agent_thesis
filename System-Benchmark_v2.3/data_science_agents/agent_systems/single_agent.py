@@ -2,6 +2,8 @@
 data_science_agents/agent_systems/single_agent.py - Single agent system with flexible CRISP-DM
 """
 import time
+import streamlit as st
+
 from typing import AsyncGenerator
 from dataclasses import dataclass
 from openai.types.responses import ResponseTextDeltaEvent
@@ -86,6 +88,14 @@ async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int 
             
             # Stream events to Streamlit in real-time
             async for event in result.stream_events():
+                if getattr(st.session_state, 'cancel_analysis', False):
+                    result.cancel()
+                    yield StreamingEvent(
+                        event_type="analysis_cancelled",
+                        content="🛑 Analysis cancelled by user",
+                        timestamp=time.time()
+                    )
+                    return
                 current_time = time.time()
                 
                 # Handle different event types for live updates
@@ -132,15 +142,4 @@ async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int 
 
             # Don't include the streaming content in final output - show clean final result
             yield StreamingEvent(
-                event_type="analysis_complete",
-                content=result.final_output,  # Just the clean final output
-                timestamp=time.time()
-            )
-            
-    except Exception as e:
-        # Simple error handling - yield error event
-        yield StreamingEvent(
-            event_type="analysis_error",
-            content=f"❌ Analysis failed: {str(e)}",
-            timestamp=time.time()
-        )
+                event_type="analysi

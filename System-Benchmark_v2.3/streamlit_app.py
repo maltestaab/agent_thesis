@@ -1,5 +1,5 @@
 """
-streamlit_app.py - Streamlit interface with live streaming
+streamlit_app.py - Streamlit interface with live streaming and cancel functionality
 """
 import streamlit as st
 import asyncio
@@ -100,6 +100,9 @@ st.markdown("""
 if 'analysis_running' not in st.session_state:
     st.session_state.analysis_running = False
 
+if 'cancel_analysis' not in st.session_state:
+    st.session_state.cancel_analysis = False
+
 # Main header
 st.title("📊 Data Science Analysis Tool")
 st.markdown("Upload your data and analyze it using AI agents with **live streaming**")
@@ -191,17 +194,26 @@ if uploaded_file:
 # Analysis request section
 st.subheader("🎯 Analysis Request")
 
-
 # Analysis prompt input
 user_prompt = st.text_area(
     "Describe your analysis needs",
-    value="Please insert your prompt here.",
+    value="Please find the effect the explanatory variables have on the target variable winpercent and visualize your results.",
     height=100,
     help="Be specific about what insights you're looking for"
 )
 
-# Analysis button
+# Analysis buttons with stop functionality
 col1, col2, col3 = st.columns([1, 2, 1])
+with col1:
+    stop_analysis = st.button(
+        "🛑 Stop Analysis",
+        disabled=not st.session_state.analysis_running,
+        use_container_width=True
+    )
+    if stop_analysis:
+        st.session_state.cancel_analysis = True
+        st.warning("⏹️ Cancellation requested...")
+
 with col2:
     run_analysis = st.button(
         f"🚀 Run {agent_mode} Analysis",
@@ -210,19 +222,33 @@ with col2:
         disabled=st.session_state.analysis_running or not uploaded_file or not user_prompt
     )
 
+with col3:
+    st.empty()  # Spacing
+
 # Run analysis when button is clicked
 if run_analysis:
     st.session_state.analysis_running = True
+    st.session_state.cancel_analysis = False  # Reset cancel flag
     
-    # Save uploaded file
-    file_name = uploaded_file.name
-    with open(file_name, 'wb') as f:
+    # Save uploaded file and analysis details
+    st.session_state.file_name = uploaded_file.name
+    st.session_state.user_prompt = user_prompt
+    st.session_state.agent_mode = agent_mode
+    st.session_state.show_live_streaming = show_live_streaming
+    
+    # Save the file
+    with open(uploaded_file.name, 'wb') as f:
         f.write(uploaded_file.getvalue())
     
+    # Force rerun to show the stop button as enabled
+    st.rerun()
+
+# Run analysis if we're in running state
+if st.session_state.analysis_running and 'file_name' in st.session_state:
     # Create analysis prompt
     analysis_prompt = ANALYSIS_PROMPT_TEMPLATE.format(
-        file_name=file_name,
-        user_prompt=user_prompt,
+        file_name=st.session_state.file_name,
+        user_prompt=st.session_state.user_prompt,
         max_tokens=MAX_TOKENS
     )
     
@@ -230,7 +256,7 @@ if run_analysis:
     st.markdown("---")
     
     # Create streaming UI containers only if user wants to see live progress
-    if show_live_streaming:
+    if st.session_state.show_live_streaming:
         agent_output, tool_activity, event_log = create_streaming_ui()
     
     async def run_streaming_analysis():
@@ -238,20 +264,20 @@ if run_analysis:
         
         try:
             # Choose analysis function based on mode
-            if agent_mode == "Single Agent":
-                analysis_stream = run_single_agent_analysis(analysis_prompt, file_name, max_turns=50)
+            if st.session_state.agent_mode == "Single Agent":
+                analysis_stream = run_single_agent_analysis(analysis_prompt, st.session_state.file_name, max_turns=50)
             else:
-                analysis_stream = run_multi_agent_analysis(analysis_prompt, file_name, max_turns=50)
+                analysis_stream = run_multi_agent_analysis(analysis_prompt, st.session_state.file_name, max_turns=50)
             
             # Initialize streaming variables only if we're showing live progress
-            if show_live_streaming:
+            if st.session_state.show_live_streaming:
                 agent_text = ""
                 tool_events = []
                 event_history = []
             
             async for event in analysis_stream:
                 # Handle different event types
-                if show_live_streaming:
+                if st.session_state.show_live_streaming:
                     if event.event_type == "text_delta":
                         # Live text streaming - append to current text
                         agent_text += event.content
@@ -318,16 +344,4 @@ if run_analysis:
                     
                 elif event.event_type == "analysis_error":
                     st.session_state.analysis_running = False
-                    st.error(event.content)
-                    return
-                    
-        except Exception as e:
-            st.error(f"Streaming analysis failed: {str(e)}")
-            st.session_state.analysis_running = False
-    
-    # Run streaming analysis
-    try:
-        asyncio.run(run_streaming_analysis())
-    except Exception as e:
-        st.error(f"Error running analysis: {str(e)}")
-        st.session_state.analysis_running = False
+                    st.er

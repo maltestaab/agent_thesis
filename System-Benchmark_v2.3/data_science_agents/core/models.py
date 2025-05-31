@@ -33,6 +33,4 @@ class AnalysisResults(BaseModel):
     metrics: AnalysisMetrics
     created_images: list[str]
     agent_results: list[AgentResult]
-    analysis_type: str
-    success: bool
-    error_message: Optional[str] = None
+    analysis_type: st

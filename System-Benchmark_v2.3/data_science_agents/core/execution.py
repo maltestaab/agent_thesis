@@ -122,6 +122,20 @@ def _execute_with_capture(code: str) -> str:
     try:
         sys.stdout = captured_output
         exec(code, execution_namespace)
+        
+        # Check if the last line is a variable reference and show its value
+        lines = code.strip().split('\n')
+        if lines:
+            last_line = lines[-1].strip()
+            # If last line is just a variable name, show its value
+            if (last_line and 
+                last_line.isidentifier() and 
+                last_line in execution_namespace and 
+                not last_line.startswith('_')):
+                
+                value = execution_namespace[last_line]
+                print(f"{last_line} = {repr(value)}")
+        
         return captured_output.getvalue()
     finally:
         sys.stdout = old_stdout
@@ -142,30 +156,22 @@ def _track_new_images(images_before: set) -> list:
 
 
 def _format_result(output: str, new_images: list, context_info: str) -> str:
-    """Format the execution result consistently."""
     result_parts = []
     
-    # Add context note if available  
-    if context_info:
-        result_parts.append("# Context loaded for execution")
-    
-    # Add main output
     if output.strip():
         result_parts.append(output.strip())
     
-    # Add image info
     if new_images:
         if len(new_images) == 1:
             result_parts.append(f"Created: {new_images[0]}")
         else:
             result_parts.append(f"Created {len(new_images)} images: {', '.join(new_images)}")
     
-    # Return formatted result or default message
+    # Better default message when no output
     if result_parts:
         return '\n'.join(result_parts)
     else:
-        return "Code executed successfully (no output)"
-
+        return "Code executed successfully (no output to display)" 
 
 def _format_error(error: Exception) -> str:
     """Format error messages for better debugging."""
@@ -210,4 +216,10 @@ def get_available_variables():
             if hasattr(value, 'shape'):
                 user_vars[name] = f"{type(value).__name__}({value.shape})"
             elif hasattr(value, '__len__') and not isinstance(value, str):
-                user_vars[name] = f"{type(value).__na
+                user_vars[name] = f"{type(value).__name__}[{len(value)}]"
+            else:
+                user_vars[name] = type(value).__name__
+        except Exception:
+            user_vars[name] = type(value).__name__
+    
+    return user_vars
