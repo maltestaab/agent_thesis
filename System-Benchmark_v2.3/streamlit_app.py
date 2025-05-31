@@ -1,5 +1,14 @@
 """
-streamlit_app.py - Streamlit interface with live streaming and cancel functionality
+streamlit_app.py - Streamlit interface
+
+# ==== WHAT THIS FILE DOES ====
+# Creates a web interface where users can:
+# 1. Upload data files (CSV, Excel)
+# 2. See a preview of their data
+# 3. Describe what analysis they want
+# 4. Watch AI agents analyze their data in real-time
+# 5. See results, charts, and insights
+
 """
 import streamlit as st
 import asyncio
@@ -9,7 +18,7 @@ import time
 from dotenv import load_dotenv
 import nest_asyncio
 
-# Apply nest_asyncio to handle asyncio in Streamlit
+# Apply nest_asyncio to handle asyncio in Streamlit (allows nested asyncio loops)
 nest_asyncio.apply()
 
 # Load environment variables
@@ -23,7 +32,7 @@ from data_science_agents.config.prompts import ANALYSIS_PROMPT_TEMPLATE
 
 
 def display_images_gallery(images):
-    """Display images in a simple gallery format"""
+    """Display created images at the end of the analysis"""
     if not images:
         return
     
@@ -43,7 +52,7 @@ def create_streaming_ui():
     streaming_container = st.container()
     
     with streaming_container:
-        st.subheader("🔴 Live Analysis Progress")
+        st.subheader("Live Analysis Progress")
         
         # Create columns for different types of updates
         col1, col2 = st.columns([2, 1])
@@ -65,15 +74,17 @@ def create_streaming_ui():
     return agent_output, tool_activity, event_log
 
 
+## MAIN APP ##
+
 # Page configuration
 st.set_page_config(
     page_title="Data Science Analysis Tool",
-    layout="wide",
+    layout="wide", #full width of browser
     initial_sidebar_state="expanded",
     page_icon="📊"
 )
 
-# Simple CSS for clean styling with auto-scroll
+# CSS styling for the streaming UI
 st.markdown("""
 <style>
     .streaming-text {
@@ -83,7 +94,6 @@ st.markdown("""
         font-family: monospace;
         max-height: 400px;
         overflow-y: auto;
-        scroll-behavior: smooth;
     }
     .tool-activity {
         background-color: #e8f4f8;
@@ -91,17 +101,29 @@ st.markdown("""
         border-radius: 0.3rem;
         max-height: 300px;
         overflow-y: auto;
-        scroll-behavior: smooth;
+    }
+    .event-log {
+        background-color: #f8f9fa;
+        padding: 0.5rem;
+        border-radius: 0.3rem;
+        max-height: 200px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 0.8rem;
+        border: 1px solid #dee2e6;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
+# Initialize session state. State remembers between page reloads.
 if 'analysis_running' not in st.session_state:
     st.session_state.analysis_running = False
 
 if 'cancel_analysis' not in st.session_state:
     st.session_state.cancel_analysis = False
+
+if 'analytics_data' not in st.session_state:
+    st.session_state.analytics_data = None
 
 # Main header
 st.title("📊 Data Science Analysis Tool")
@@ -118,7 +140,7 @@ with st.sidebar:
         help="Single Agent: One AI handles all phases. Multi-Agent: Specialized agents for each CRISP-DM phase."
     )
     
-    # Streaming toggle - everything is streaming now, but keep toggle for user preference
+    # Streaming toggle (Streaming yes or no)
     show_live_streaming = st.checkbox(
         "🔴 Show Live Progress",
         value=True,
@@ -127,12 +149,47 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # API Key status check
-    if os.getenv("OPENAI_API_KEY"):
-        st.success("✅ OpenAI API Key detected")
-    else:
-        st.error("❌ OpenAI API Key not found")
-        st.info("Set OPENAI_API_KEY in your environment")
+    # Model selection
+    st.subheader("🤖 Model Settings")
+    
+    # Available models from token costs
+    available_models = [
+        "gpt-4o-mini",
+        "gpt-4o", 
+        "gpt-4",
+        "gpt-3.5-turbo"
+    ]
+    
+    # Model descriptions
+    model_descriptions = {
+        "gpt-4o-mini": "Fast and cost-effective, ideal for most data analysis tasks",
+        "gpt-4o": "Latest GPT-4 model with best performance and reasoning capabilities", 
+        "gpt-4": "Previous GPT-4 version, very capable for complex analysis",
+        "gpt-3.5-turbo": "Fastest and most economical option for basic analysis"
+    }
+    
+    selected_model = st.selectbox(
+        "Choose AI Model",
+        available_models,
+        index=0,  # Default to gpt-4o-mini
+        help="Select the AI model for analysis"
+    )
+    
+    # Show model description and pricing
+    if selected_model:
+        from data_science_agents.config.settings import TOKEN_COSTS
+        costs = TOKEN_COSTS[selected_model]
+        
+        # Description
+        st.markdown(f"**{model_descriptions[selected_model]}**")
+        
+        # Pricing in a clean, smaller format
+        st.markdown("**Pricing per 1 million tokens:**")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"📥 **Input:** ${costs['input']:.2f}")
+        with col2:
+            st.write(f"📤 **Output:** ${costs['output']:.2f}")
 
 # Main layout
 st.header("📁 Data Upload & Analysis")
@@ -229,12 +286,14 @@ with col3:
 if run_analysis:
     st.session_state.analysis_running = True
     st.session_state.cancel_analysis = False  # Reset cancel flag
+    st.session_state.analytics_data = None  # Reset analytics
     
     # Save uploaded file and analysis details
     st.session_state.file_name = uploaded_file.name
     st.session_state.user_prompt = user_prompt
     st.session_state.agent_mode = agent_mode
     st.session_state.show_live_streaming = show_live_streaming
+    st.session_state.selected_model = selected_model  # Store selected model
     
     # Save the file
     with open(uploaded_file.name, 'wb') as f:
@@ -255,6 +314,20 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
     # === STREAMING ANALYSIS ===
     st.markdown("---")
     
+    # Create live analytics at the top
+    st.subheader("📊 Live Analytics")
+    analytics_col1, analytics_col2, analytics_col3, analytics_col4 = st.columns(4)
+    with analytics_col1:
+        duration_metric = st.empty()
+    with analytics_col2:
+        tools_metric = st.empty()
+    with analytics_col3:
+        cost_metric = st.empty()
+    with analytics_col4:
+        images_metric = st.empty()
+    
+    st.markdown("---")
+    
     # Create streaming UI containers only if user wants to see live progress
     if st.session_state.show_live_streaming:
         agent_output, tool_activity, event_log = create_streaming_ui()
@@ -265,73 +338,219 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
         try:
             # Choose analysis function based on mode
             if st.session_state.agent_mode == "Single Agent":
-                analysis_stream = run_single_agent_analysis(analysis_prompt, st.session_state.file_name, max_turns=50)
+                analysis_stream = run_single_agent_analysis(
+                    analysis_prompt, 
+                    st.session_state.file_name, 
+                    max_turns=50,
+                    model=st.session_state.get('selected_model', 'gpt-4o-mini')
+                )
             else:
-                analysis_stream = run_multi_agent_analysis(analysis_prompt, st.session_state.file_name, max_turns=50)
+                analysis_stream = run_multi_agent_analysis(
+                    analysis_prompt, 
+                    st.session_state.file_name, 
+                    max_turns=50,
+                    model=st.session_state.get('selected_model', 'gpt-4o-mini')
+                )
+            
+            # Initialize analytics tracking (always)
+            live_analytics = {
+                'start_time': time.time(),
+                'tool_calls': 0,
+                'total_tokens': 0,
+                'images_created': 0
+            }
+            
+            # Update live analytics display function
+            def update_live_analytics():
+                duration = time.time() - live_analytics['start_time']
+                # Updated cost calculation for per-million-token rates
+                estimated_cost = live_analytics['total_tokens'] * 0.15 / 1_000_000  # Using gpt-4o-mini rate as default
+                
+                duration_metric.metric("Duration", f"{duration:.1f}s")
+                tools_metric.metric("Tool Calls", live_analytics['tool_calls'])
+                cost_metric.metric("Est. Cost", f"${estimated_cost:.4f}")
+                images_metric.metric("Images", live_analytics['images_created'])
             
             # Initialize streaming variables only if we're showing live progress
             if st.session_state.show_live_streaming:
                 agent_text = ""
+                full_conversation = []  # Keep full conversation history
                 tool_events = []
                 event_history = []
             
             async for event in analysis_stream:
-                # Handle different event types
+                current_time = time.time()
+                
+                # Always track analytics regardless of streaming mode
+                if event.event_type == "text_delta":
+                    # Estimate tokens (rough: 4 chars = 1 token)
+                    live_analytics['total_tokens'] += len(event.content) / 4
+                elif event.event_type == "tool_call":
+                    live_analytics['tool_calls'] += 1
+                
+                # Handle different event types for streaming
                 if st.session_state.show_live_streaming:
                     if event.event_type == "text_delta":
                         # Live text streaming - append to current text
                         agent_text += event.content
                         agent_output.markdown(f'<div class="streaming-text">{agent_text}</div>', unsafe_allow_html=True)
                     
+                    elif event.event_type == "analytics_start":
+                        # Initialize analytics display - just update local tracking
+                        pass
+                    
+                    elif event.event_type == "analytics_complete":
+                        # Parse final analytics from content and store in session state
+                        try:
+                            import re
+                            duration_match = re.search(r'(\d+\.?\d*)s', event.content)
+                            tools_match = re.search(r'(\d+) tools', event.content)
+                            phases_match = re.search(r'(\d+) phases', event.content)
+                            cost_match = re.search(r'\$(\d+\.?\d+)', event.content)
+                            
+                            from data_science_agents.core.execution import get_created_images
+                            
+                            st.session_state.analytics_data = {
+                                'total_duration': float(duration_match.group(1)) if duration_match else 0,
+                                'tool_calls': int(tools_match.group(1)) if tools_match else live_analytics['tool_calls'],
+                                'phases_completed': int(phases_match.group(1)) if phases_match else 0,
+                                'estimated_cost': float(cost_match.group(1)) if cost_match else live_analytics['total_tokens'] * 0.00015 / 1000,
+                                'images_created': len(get_created_images()),
+                                'agent_durations': {}
+                            }
+                            
+                            # Update live display with final values
+                            update_live_analytics()
+                            
+                        except Exception as e:
+                            # Use live analytics as fallback
+                            st.session_state.analytics_data = {
+                                'total_duration': time.time() - live_analytics['start_time'],
+                                'tool_calls': live_analytics['tool_calls'],
+                                'estimated_cost': live_analytics['total_tokens'] * 0.00015 / 1000,
+                                'images_created': live_analytics['images_created'],
+                                'agent_durations': {}
+                            }
+                    
                     elif event.event_type == "tool_call":
-                        # Tool call started - show in tool activity only
+                        # Tool call started
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
-                        tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(tool_events[-3:])}</div>', unsafe_allow_html=True)
+                        # Show ALL tool events, not just last 3
+                        tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(tool_events)}</div>', unsafe_allow_html=True)
                     
                     elif event.event_type == "tool_output":
-                        # Tool call completed - show in tool activity only
+                        # Tool call completed
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - ✅ Execution completed")
-                        tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(tool_events[-3:])}</div>', unsafe_allow_html=True)
+                        tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(tool_events)}</div>', unsafe_allow_html=True)
                     
                     elif event.event_type == "agent_reasoning":
-                        # Agent reasoning/thinking - show this prominently with auto-scroll
-                        agent_output.markdown(f'''
-                        <div class="streaming-text" id="agent-output">
-                            {event.content}
-                        </div>
-                        <script>
-                            const element = document.getElementById('agent-output');
-                            if (element) {{
-                                element.scrollTop = element.scrollHeight;
-                            }}
-                        </script>
-                        ''', unsafe_allow_html=True)
+                        # Add reasoning to conversation history
+                        full_conversation.append(f"🤔 {event.agent_name}: {event.content}")
+                        # Show complete conversation, not just current text
+                        conversation_html = "<br><br>".join(full_conversation)
+                        agent_output.markdown(f'<div class="streaming-text">{conversation_html}</div>', unsafe_allow_html=True)
                                         
-                    elif event.event_type == "agent_handoff":
-                        # Multi-agent handoff
+                    elif event.event_type in ["agent_handoff", "agent_result", "sub_agent_start", "sub_agent_complete"]:
+                        # Multi-agent events
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
-                        tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(tool_events[-3:])}</div>', unsafe_allow_html=True)
-
-                    elif event.event_type == "agent_result":
-                        # Clean agent completion message
-                        tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
-                        tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(tool_events[-3:])}</div>', unsafe_allow_html=True)
+                        tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(tool_events)}</div>', unsafe_allow_html=True)
                     
                     elif event.event_type == "message_complete":
-                        # Complete message - reset for next thinking block
-                        agent_text = ""
+                        # Message complete - add to conversation history but don't reset current text
+                        if agent_text.strip():
+                            full_conversation.append(agent_text.strip())
+                        agent_text = ""  # Reset for next message
                     
-                    # Only add meaningful events to history (not text deltas)
+                    # Add ALL events to history (except text deltas for readability)
                     if event.event_type not in ["text_delta"]:
                         event_history.append(f"[{event.agent_name}] {event.event_type}")
-                        event_log.text("\n".join(event_history[-8:]))  # Show last 8 events, fewer lines
+                        # Show only last 20 events with scrolling
+                        recent_events = event_history[-20:] if len(event_history) > 20 else event_history
+                        event_log.markdown(f'<div class="event-log">{"<br>".join(recent_events)}</div>', unsafe_allow_html=True)
+                    
+                    # Update live analytics in main area every few events
+                    if len(event_history) % 5 == 0 or event.event_type == "tool_call":
+                        update_live_analytics()
+                    
+                    # Store analytics in session state for sidebar (updated less frequently)
+                    if len(event_history) % 10 == 0:
+                        duration = current_time - live_analytics['start_time']
+                        estimated_cost = live_analytics['total_tokens'] * 0.00015 / 1000
+                        
+                        st.session_state.analytics_data = {
+                            'total_duration': duration,
+                            'tool_calls': live_analytics['tool_calls'],
+                            'estimated_cost': estimated_cost,
+                            'images_created': live_analytics['images_created'],
+                            'agent_durations': {}
+                        }
                     
                     # Small delay to make streaming visible
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.05)
+                
+                # Always update analytics every 10 events, even without streaming
+                if hasattr(event, 'event_type') and len(str(event.event_type)) > 0:
+                    if live_analytics['tool_calls'] % 5 == 0:
+                        update_live_analytics()
                 
                 # Handle completion or error (regardless of streaming preference)
-                if event.event_type == "analysis_complete":
+                if event.event_type == "analytics_complete":
+                    # Always capture final analytics, even if streaming is off
+                    try:
+                        import re
+                        duration_match = re.search(r'(\d+\.?\d*)s', event.content)
+                        tools_match = re.search(r'(\d+) tools', event.content)
+                        phases_match = re.search(r'(\d+) phases', event.content)
+                        cost_match = re.search(r'\$(\d+\.?\d+)', event.content)
+                        
+                        from data_science_agents.core.execution import get_created_images
+                        
+                        final_analytics = {
+                            'total_duration': float(duration_match.group(1)) if duration_match else (time.time() - live_analytics['start_time']),
+                            'tool_calls': int(tools_match.group(1)) if tools_match else live_analytics['tool_calls'],
+                            'phases_completed': int(phases_match.group(1)) if phases_match else 0,
+                            'estimated_cost': float(cost_match.group(1)) if cost_match else (live_analytics['total_tokens'] * 0.00015 / 1000),
+                            'images_created': len(get_created_images()),
+                            'agent_durations': {}
+                        }
+                        
+                        st.session_state.analytics_data = final_analytics
+                        
+                        # Update live display with final values
+                        live_analytics.update({
+                            'tool_calls': final_analytics['tool_calls'],
+                            'total_tokens': final_analytics['estimated_cost'] * 1000 / 0.00015,  # Reverse calculate
+                            'images_created': final_analytics['images_created']
+                        })
+                        update_live_analytics()
+                        
+                    except Exception as e:
+                        # Use live analytics as fallback
+                        st.session_state.analytics_data = {
+                            'total_duration': time.time() - live_analytics['start_time'],
+                            'tool_calls': live_analytics['tool_calls'],
+                            'estimated_cost': live_analytics['total_tokens'] * 0.00015 / 1000,
+                            'images_created': live_analytics['images_created'],
+                            'agent_durations': {}
+                        }
+                        update_live_analytics()
+                
+                elif event.event_type == "analysis_complete":
                     st.session_state.analysis_running = False
+                    
+                    # Ensure final analytics are saved
+                    if not st.session_state.get('analytics_data'):
+                        st.session_state.analytics_data = {
+                            'total_duration': time.time() - live_analytics['start_time'],
+                            'tool_calls': live_analytics['tool_calls'],
+                            'estimated_cost': live_analytics['total_tokens'] * 0.15 / 1_000_000,
+                            'images_created': live_analytics['images_created'],
+                            'agent_durations': {}
+                        }
+                    
+                    # Final analytics update
+                    update_live_analytics()
+                    
                     st.success("🎉 Analysis completed!")
                     
                     # Show final results cleanly formatted

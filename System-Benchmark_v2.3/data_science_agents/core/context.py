@@ -3,7 +3,6 @@ data_science_agents/core/context.py - Simple context for sharing state between a
 """
 from dataclasses import dataclass, field
 from typing import Dict, List, Any
-from agents import RunContextWrapper
 from data_science_agents.core.execution import get_available_variables, get_created_images
 
 
@@ -32,30 +31,16 @@ class AnalysisContext:
     def get_created_images(self) -> List[str]:
         """Get list of created images"""
         return get_created_images()
-    
-    def has_data_loaded(self) -> bool:
-        """Check if data has already been loaded"""
-        variables = self.get_available_variables()
-        # Common variable names for loaded datasets
-        data_vars = ['df', 'data', 'dataset']
-        return any(var in variables for var in data_vars)
-    
-    def get_previous_results_summary(self) -> str:
-        """Get a summary of what's been accomplished so far"""
-        if not self.agent_results:
-            return "No previous analysis results available."
-        
-        summary_parts = []
-        for phase, result in self.agent_results.items():
-            if hasattr(result, 'summary'):
-                summary_parts.append(f"**{phase}**: {result.summary}")
-            else:
-                summary_parts.append(f"**{phase}**: Completed")
-        
-        return "\n".join(summary_parts)
-
 
 def update_context_with_result(context: AnalysisContext, phase: str, result: Any):
     """Update context with results from a completed phase"""
     context.completed_phases.append(phase)
     context.agent_results[phase] = result
+
+
+
+
+"""
+data_science_agents/core/events.py - Shared events for streaming
+"""
+

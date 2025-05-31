@@ -16,9 +16,18 @@ MAX_TURNS = int(os.getenv("MAX_TURNS", "50"))
 SUPPORTED_FILE_TYPES = ["csv", "xlsx", "xls"]
 IMAGES_DIR = "Images"
 
-# Cost estimation (per 1K tokens) - simplified for basic cost tracking
+# Current token costs per 1M tokens (updated January 2025)
 TOKEN_COSTS = {
-    "gpt-4o-mini": 0.00015,
-    "gpt-4": 0.01,
-    "gpt-3.5-turbo": 0.0005
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+    "gpt-4o": {"input": 3.00, "output": 10.00}, 
+    "gpt-4": {"input": 30.00, "output": 60.00},
+    "gpt-3.5-turbo": {"input": 0.50, "output": 1.50}
 }
+
+def get_model_cost(model_name: str, input_tokens: int = 0, output_tokens: int = 0) -> float:
+    """Calculate cost for model usage"""
+    if model_name not in TOKEN_COSTS:
+        model_name = "gpt-4o-mini"  # fallback
+    
+    costs = TOKEN_COSTS[model_name]
+    return (input_tokens * costs["input"] + output_tokens * costs["output"]) / 1_000_000

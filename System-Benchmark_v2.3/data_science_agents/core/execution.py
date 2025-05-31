@@ -9,17 +9,16 @@ import seaborn as sns
 import os
 import sys
 import io
-import re
 import traceback
-from typing import Any, Dict
 from agents import function_tool, RunContextWrapper
+from data_science_agents.config.settings import IMAGES_DIR
+
 
 # Configure plotting settings
 import warnings
 warnings.filterwarnings('ignore')
 
 # Ensure Images directory exists
-IMAGES_DIR = "Images"
 os.makedirs(IMAGES_DIR, exist_ok=True)
 
 # Simple global state for code execution
@@ -53,7 +52,7 @@ def reset_execution_state():
     created_images.clear()
 
 
-@function_tool
+@function_tool # Decorator to make the function a tool that can be used by the agents
 def execute_code(ctx: RunContextWrapper, code: str) -> str:
     """
     Execute Python code with context awareness.
@@ -114,7 +113,7 @@ def _get_current_images() -> set:
 
 
 def _execute_with_capture(code: str) -> str:
-    """Execute code and capture printed output."""
+    """Execute code and capture printed output. (CORE FUNCTION!)"""
     # Capture stdout
     old_stdout = sys.stdout
     captured_output = io.StringIO()

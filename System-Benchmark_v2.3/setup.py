@@ -13,7 +13,11 @@ setup(
         "numpy",
         "scipy",
         "scikit-learn",
-        "asyncio"
+        "matplotlib",
+        "seaborn",
+        "openai",
+        "agents",
+        "streamlit"
     ],
     python_requires=">=3.7",
 ) 
