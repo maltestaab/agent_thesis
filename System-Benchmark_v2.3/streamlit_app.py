@@ -17,6 +17,7 @@ import pandas as pd
 import time
 from dotenv import load_dotenv
 import nest_asyncio
+from collections import deque
 
 # Apply nest_asyncio to handle asyncio in Streamlit (allows nested asyncio loops)
 nest_asyncio.apply()
@@ -373,10 +374,20 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
             
             # Initialize streaming variables only if we're showing live progress
             if st.session_state.show_live_streaming:
-                agent_text = ""
-                full_conversation = []  # Keep full conversation history
-                tool_events = []
-                event_history = []
+                agent_text = ""  # Live window text (limited)
+                full_agent_text = ""  # Complete text for final display
+                text_buffer = ""  # Buffer for text deltas
+                last_text_update = time.time()
+                
+                full_conversation = []  # Keep full conversation history - limit to 4
+                tool_events = deque(maxlen=8)  # Full history for final display
+                event_history = deque(maxlen=15)  # Full history for final display
+                
+                # Time-based update tracking
+                last_analytics_update = time.time()
+                last_tool_update = time.time()
+                last_event_update = time.time()
+                event_counter = 0
             
             async for event in analysis_stream:
                 current_time = time.time()
@@ -391,9 +402,20 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                 # Handle different event types for streaming
                 if st.session_state.show_live_streaming:
                     if event.event_type == "text_delta":
-                        # Live text streaming - append to current text
-                        agent_text += event.content
-                        agent_output.markdown(f'<div class="streaming-text">{agent_text}</div>', unsafe_allow_html=True)
+                        # Buffer text updates - update every 2.5 seconds (more chunked)
+                        text_buffer += event.content
+                        full_agent_text += event.content  # Store complete text
+                        
+                        if current_time - last_text_update >= 2.5:
+                            agent_text += text_buffer
+                            text_buffer = ""
+                            
+                            # Show only last 400 characters in live window (smaller window)
+                            if len(agent_text) > 400:
+                                agent_text = agent_text[-400:]
+                            
+                            agent_output.markdown(f'<div class="streaming-text">{agent_text}</div>', unsafe_allow_html=True)
+                            last_text_update = current_time
                     
                     elif event.event_type == "analytics_start":
                         # Initialize analytics display - just update local tracking
@@ -433,47 +455,78 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                             }
                     
                     elif event.event_type == "tool_call":
-                        # Tool call started
+                        # Tool call started - update every 2.5 seconds, show only last 2 items
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
-                        # Show ALL tool events, not just last 3
-                        tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(tool_events)}</div>', unsafe_allow_html=True)
+                        
+                        if current_time - last_tool_update >= 2.5:
+                            # Show only last 2 items during streaming
+                            recent_tools = list(tool_events)[-2:]
+                            tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(recent_tools)}</div>', unsafe_allow_html=True)
+                            last_tool_update = current_time
                     
                     elif event.event_type == "tool_output":
                         # Tool call completed
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - ✅ Execution completed")
-                        tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(tool_events)}</div>', unsafe_allow_html=True)
+                        
+                        if current_time - last_tool_update >= 2.5:
+                            # Show only last 2 items during streaming
+                            recent_tools = list(tool_events)[-2:]
+                            tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(recent_tools)}</div>', unsafe_allow_html=True)
+                            last_tool_update = current_time
                     
                     elif event.event_type == "agent_reasoning":
-                        # Add reasoning to conversation history
-                        full_conversation.append(f"🤔 {event.agent_name}: {event.content}")
-                        # Show complete conversation, not just current text
-                        conversation_html = "<br><br>".join(full_conversation)
+                        # Add reasoning to conversation history - limit to 2 entries for live view
+                        reasoning_text = f"🤔 {event.agent_name}: {event.content}"
+                        full_conversation.append(reasoning_text)
+                        
+                        # Show only last 2 conversation entries during streaming
+                        recent_conversation = full_conversation[-2:]
+                        conversation_html = "<br><br>".join(recent_conversation)
                         agent_output.markdown(f'<div class="streaming-text">{conversation_html}</div>', unsafe_allow_html=True)
                                         
                     elif event.event_type in ["agent_handoff", "agent_result", "sub_agent_start", "sub_agent_complete"]:
                         # Multi-agent events
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
-                        tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(tool_events)}</div>', unsafe_allow_html=True)
+                        
+                        if current_time - last_tool_update >= 2.5:
+                            # Show only last 2 items during streaming
+                            recent_tools = list(tool_events)[-2:]
+                            tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(recent_tools)}</div>', unsafe_allow_html=True)
+                            last_tool_update = current_time
                     
                     elif event.event_type == "message_complete":
-                        # Message complete - add to conversation history but don't reset current text
-                        if agent_text.strip():
-                            full_conversation.append(agent_text.strip())
-                        agent_text = ""  # Reset for next message
+                        # Message complete - flush any remaining text buffer
+                        if text_buffer:
+                            agent_text += text_buffer
+                            full_agent_text += text_buffer  # Add to complete text too
+                            text_buffer = ""
+                            
+                            # Show only last 400 characters in live window
+                            if len(agent_text) > 400:
+                                agent_text = agent_text[-400:]
+                            
+                            agent_output.markdown(f'<div class="streaming-text">{agent_text}</div>', unsafe_allow_html=True)
+                        
+                        # Reset for next message
+                        agent_text = ""
                     
-                    # Add ALL events to history (except text deltas for readability)
+                    # Add events to history - show only last 3 during streaming, update every 8 events (less frequent)
                     if event.event_type not in ["text_delta"]:
                         event_history.append(f"[{event.agent_name}] {event.event_type}")
-                        # Show only last 20 events with scrolling
-                        recent_events = event_history[-20:] if len(event_history) > 20 else event_history
-                        event_log.markdown(f'<div class="event-log">{"<br>".join(recent_events)}</div>', unsafe_allow_html=True)
+                        event_counter += 1
+                        
+                        if event_counter % 8 == 0:
+                            # Show only last 3 events during streaming
+                            recent_events = list(event_history)[-3:]
+                            event_log.markdown(f'<div class="event-log">{"<br>".join(recent_events)}</div>', unsafe_allow_html=True)
                     
-                    # Update live analytics in main area every few events
-                    if len(event_history) % 5 == 0 or event.event_type == "tool_call":
+                    # Update analytics every 4 seconds or 10 events (slightly less frequent)
+                    if (current_time - last_analytics_update >= 4.0) or (event_counter % 10 == 0):
                         update_live_analytics()
+                        last_analytics_update = current_time
                     
-                    # Store analytics in session state for sidebar (updated less frequently)
-                    if len(event_history) % 10 == 0:
+                    # Store analytics in session state less frequently
+                    if event_counter % 20 == 0:
                         duration = current_time - live_analytics['start_time']
                         estimated_cost = live_analytics['total_tokens'] * 0.00015 / 1000
                         
@@ -490,7 +543,7 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                 
                 # Always update analytics every 10 events, even without streaming
                 if hasattr(event, 'event_type') and len(str(event.event_type)) > 0:
-                    if live_analytics['tool_calls'] % 5 == 0:
+                    if live_analytics['tool_calls'] % 10 == 0:
                         update_live_analytics()
                 
                 # Handle completion or error (regardless of streaming preference)
@@ -537,6 +590,36 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                 
                 elif event.event_type == "analysis_complete":
                     st.session_state.analysis_running = False
+                    
+                    # Flush any remaining text buffer
+                    if st.session_state.show_live_streaming and 'text_buffer' in locals() and text_buffer:
+                        agent_text += text_buffer
+                        full_agent_text += text_buffer
+                        if len(agent_text) > 600:
+                            agent_text = agent_text[-600:]
+                        agent_output.markdown(f'<div class="streaming-text">{agent_text}</div>', unsafe_allow_html=True)
+                    
+                    # Convert live windows to full scrollable versions
+                    if st.session_state.show_live_streaming:
+                        # Replace agent output with full content
+                        if full_agent_text or full_conversation:
+                            combined_content = ""
+                            if full_agent_text:
+                                combined_content += full_agent_text
+                            if full_conversation:
+                                if combined_content:
+                                    combined_content += "<br><br>" + "<br><br>".join(full_conversation)
+                                else:
+                                    combined_content = "<br><br>".join(full_conversation)
+                            agent_output.markdown(f'<div class="streaming-text">{combined_content}</div>', unsafe_allow_html=True)
+                        
+                        # Replace tool activity with full history
+                        if tool_events:
+                            tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(tool_events)}</div>', unsafe_allow_html=True)
+                        
+                        # Replace event log with full history
+                        if event_history:
+                            event_log.markdown(f'<div class="event-log">{"<br>".join(event_history)}</div>', unsafe_allow_html=True)
                     
                     # Ensure final analytics are saved
                     if not st.session_state.get('analytics_data'):
