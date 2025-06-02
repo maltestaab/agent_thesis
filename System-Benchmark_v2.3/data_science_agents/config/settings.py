@@ -11,6 +11,7 @@ DEFAULT_TOP_P = float(os.getenv("DEFAULT_TOP_P", "0.3"))
 # Analysis limits
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "100000"))
 MAX_TURNS = int(os.getenv("MAX_TURNS", "50"))
+MAX_TURNS_SINGLE = int(os.getenv("MAX_TURNS_SINGLE", "250"))
 
 # File handling
 SUPPORTED_FILE_TYPES = ["csv", "xlsx", "xls"]

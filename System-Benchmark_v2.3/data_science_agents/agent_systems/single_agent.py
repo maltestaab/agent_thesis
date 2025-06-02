@@ -12,12 +12,12 @@ from agents import Agent, Runner, ModelSettings, trace, ItemHelpers
 from data_science_agents.core.execution import execute_code, reset_execution_state, get_created_images
 from data_science_agents.core.context import AnalysisContext
 from data_science_agents.config.prompts import SINGLE_AGENT_ENHANCED, CORE_INSTRUCTION
-from data_science_agents.config.settings import DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS, MAX_TOKENS
+from data_science_agents.config.settings import DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS_SINGLE, MAX_TOKENS
 from data_science_agents.core.events import StreamingEvent
 from data_science_agents.core.analytics import AnalyticsTracker
 
 
-async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int = MAX_TURNS, model: str = DEFAULT_MODEL) -> AsyncGenerator[StreamingEvent, None]:
+async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int = MAX_TURNS_SINGLE, model: str = DEFAULT_MODEL) -> AsyncGenerator[StreamingEvent, None]:
     """
     Run a complete data science analysis using a single agent with streaming.
     

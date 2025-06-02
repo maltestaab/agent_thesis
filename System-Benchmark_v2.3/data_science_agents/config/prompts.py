@@ -103,7 +103,7 @@ STRUCTURED_OUTPUT_RULES = (
     '  }},'
     '  "images_created": ["filename1.png", "filename2.png"],'
     '  "next_phase_recommendation": "what should happen next",'
-    '  "phase_complete": true,'
+    '  "phase_complete": True,'
     '  "input_file_used": "exact_filename_you_loaded",'
     '  "output_file_created": "exact_filename_you_saved_or_empty_string"'
     "}}"
@@ -142,7 +142,7 @@ COMMON_TASK_COMPLETION = (
 def get_specialist_system_context(phase_name):
     return (
         f"**SYSTEM CONTEXT:**"
-        f"You are a specialist agent working as part of a larger CRISP-DM data science workflow. "
+        f"You are a specialist agent working as part of a larger data science workflow. "
         f"Your role is to execute the {phase_name} phase efficiently and hand off clean results "
         f"to the next phase specialist."
         f"\n\n"
@@ -167,11 +167,11 @@ SINGLE_AGENT_ENHANCED = (
     "\n\n"
     "{core_instruction}"
     "\n\n"
-    "As the sole agent, you have the flexibility to follow relevant CRISP-DM phases based on the specific analysis request. "
+    "As the sole agent, you have the flexibility to follow relevant phases based on the specific analysis request. "
     "You don't need to execute every phase if it's not relevant to the task. Use your professional judgment to determine "
     "which phases are necessary and skip those that don't add value to the specific analysis requested."
     "\n\n"
-    "ENHANCED CRISP-DM WORKFLOW MANAGEMENT:"
+    "ENHANCED WORKFLOW MANAGEMENT:"
     "- Build cumulative context as you progress through relevant phases"
     "- Always reference and build upon findings from previous phases"
     "- Track what data variables you've created and what they contain"
@@ -179,7 +179,7 @@ SINGLE_AGENT_ENHANCED = (
     "- Maintain continuity in your analysis narrative"
     "- DO NOT repeat work from previous phases - build upon your own results"
     "\n\n"
-    "FLEXIBLE CRISP-DM PHASES (execute only what's relevant for the task):"
+    "FLEXIBLE PHASES (execute only what's relevant for the task):"
     "\n\n"
     "1. **BUSINESS UNDERSTANDING** (if needed for complex business problems):"
     "   - **Determine Business Objectives**: Understand project goals from business perspective, define success criteria"
@@ -558,7 +558,7 @@ DEPLOYMENT_ENHANCED = (
     "\n\n"
     "TASK COMPLETION:"
     "Create concise deployment guidance with deployment plan, monitoring strategy, final report, and project documentation."
-    "This is the final CRISP-DM phase."
+    "This is the final phase."
     "\n\n" +
     STRUCTURED_OUTPUT_RULES +
     CODE_EXECUTION_UNDERSTANDING
