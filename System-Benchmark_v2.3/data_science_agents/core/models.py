@@ -13,7 +13,6 @@ class AgentResult(BaseModel):
     key_findings: dict[str, str]
     images_created: list[str]
     next_phase_recommendation: str
-    phase_complete: bool
     input_file_used: str
     output_file_created: str = ""
 

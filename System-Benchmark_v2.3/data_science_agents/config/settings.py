@@ -5,8 +5,8 @@ import os
 
 # Model configuration - using environment variables with sensible defaults
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
-DEFAULT_TEMPERATURE = float(os.getenv("DEFAULT_TEMPERATURE", "0.1"))
-DEFAULT_TOP_P = float(os.getenv("DEFAULT_TOP_P", "0.3"))
+DEFAULT_TEMPERATURE = float(os.getenv("DEFAULT_TEMPERATURE", "0.5"))
+DEFAULT_TOP_P = float(os.getenv("DEFAULT_TOP_P", "0.5"))
 
 # Analysis limits
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "100000"))

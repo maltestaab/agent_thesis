@@ -33,18 +33,30 @@ from data_science_agents.config.prompts import ANALYSIS_PROMPT_TEMPLATE
 
 
 def display_images_gallery(images):
-    """Display created images at the end of the analysis"""
+    """Display created images with simple file extension filtering"""
     if not images:
+        return
+    
+    # Valid image extensions
+    image_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.tiff', '.webp')
+    
+    # Filter for image files only
+    image_files = [img for img in images if img.lower().endswith(image_extensions) and os.path.exists(img)]
+    
+    if not image_files:
         return
     
     st.subheader("📸 Generated Visualizations")
     
-    # Display images in columns for better layout
+    # Display images in columns
     cols = st.columns(2)
-    for i, img_path in enumerate(images):
-        if os.path.exists(img_path):
+    for i, img_path in enumerate(image_files):
+        try:
             with cols[i % 2]:
-                st.image(img_path, caption=os.path.basename(img_path), use_container_width=True) 
+                st.image(img_path, caption=os.path.basename(img_path), use_container_width=True)
+        except Exception as e:
+            # Skip files that can't be displayed as images
+            continue
                 
 def create_streaming_ui():
     """Create the live streaming interface containers"""
@@ -380,8 +392,8 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                 last_text_update = time.time()
                 
                 full_conversation = []  # Keep full conversation history - limit to 4
-                tool_events = deque(maxlen=8)  # Full history for final display
-                event_history = deque(maxlen=15)  # Full history for final display
+                tool_events = deque()  # Full history for final display
+                event_history = deque()  # Full history for final display
                 
                 # Time-based update tracking
                 last_analytics_update = time.time()
@@ -410,7 +422,6 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                             agent_text += text_buffer
                             text_buffer = ""
                             
-                            # Show only last 400 characters in live window (smaller window)
                             if len(agent_text) > 400:
                                 agent_text = agent_text[-400:]
                             
@@ -475,15 +486,10 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                             last_tool_update = current_time
                     
                     elif event.event_type == "agent_reasoning":
-                        # Add reasoning to conversation history - limit to 2 entries for live view
-                        reasoning_text = f"🤔 {event.agent_name}: {event.content}"
-                        full_conversation.append(reasoning_text)
-                        
-                        # Show only last 2 conversation entries during streaming
-                        recent_conversation = full_conversation[-2:]
-                        conversation_html = "<br><br>".join(recent_conversation)
-                        agent_output.markdown(f'<div class="streaming-text">{conversation_html}</div>', unsafe_allow_html=True)
-                                        
+                        # Capture sub-agent reasoning for final display
+                        if st.session_state.agent_mode == "Multi-Agent":
+                            full_agent_text += f"\n🤔 {event.agent_name}: {event.content}\n"
+
                     elif event.event_type in ["agent_handoff", "agent_result", "sub_agent_start", "sub_agent_complete"]:
                         # Multi-agent events
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
@@ -644,6 +650,7 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                     from data_science_agents.core.execution import get_created_images
                     images = get_created_images()
                     if images:
+                        time.sleep(0.3)  # Let matplotlib finish writing files
                         st.markdown("---")
                         display_images_gallery(images)
                     

@@ -11,7 +11,7 @@ from openai.types.responses import ResponseTextDeltaEvent
 from agents import Agent, Runner, ModelSettings, trace, ItemHelpers
 from data_science_agents.core.execution import execute_code, reset_execution_state, get_created_images
 from data_science_agents.core.context import AnalysisContext
-from data_science_agents.config.prompts import SINGLE_AGENT_ENHANCED, CORE_INSTRUCTION
+from data_science_agents.config.prompts import SINGLE_AGENT_ENHANCED
 from data_science_agents.config.settings import DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS_SINGLE, MAX_TOKENS
 from data_science_agents.core.events import StreamingEvent
 from data_science_agents.core.analytics import AnalyticsTracker
@@ -44,7 +44,8 @@ async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int 
     context = AnalysisContext(
         file_name=file_name,
         analysis_type="single_agent",
-        start_time=time.time()
+        start_time=time.time(),
+        original_prompt=prompt
     )
     
     # Initialize analytics tracking
@@ -77,7 +78,7 @@ async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int 
                     temperature=DEFAULT_TEMPERATURE,
                     top_p=DEFAULT_TOP_P
                 ),
-                instructions=SINGLE_AGENT_ENHANCED.format(core_instruction=CORE_INSTRUCTION),
+                instructions=SINGLE_AGENT_ENHANCED,
                 tools=[execute_code]
             )
 

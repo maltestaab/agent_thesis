@@ -19,6 +19,8 @@ class AnalysisContext:
     file_name: str
     analysis_type: str  # "single_agent" or "multi_agent"
     start_time: float
+    original_prompt: str = "" 
+
     
     # Execution state - updated by tools as work progresses
     completed_phases: List[str] = field(default_factory=list)
@@ -31,6 +33,7 @@ class AnalysisContext:
     def get_created_images(self) -> List[str]:
         """Get list of created images"""
         return get_created_images()
+    
 
 def update_context_with_result(context: AnalysisContext, phase: str, result: Any):
     """Update context with results from a completed phase"""

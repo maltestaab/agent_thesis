@@ -23,8 +23,9 @@ from data_science_agents.config.prompts import (
     EVALUATION_ENHANCED,
     DEPLOYMENT_ENHANCED,
     ORCHESTRATOR_ENHANCED,
-    CORE_INSTRUCTION
 )
+
+
 
 
 class StreamEventBroadcaster:
@@ -203,7 +204,8 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
     context = AnalysisContext(
         file_name=file_name,
         analysis_type="multi_agent",
-        start_time=time.time()
+        start_time=time.time(),
+        original_prompt=prompt
     )
     
     # Initialize analytics tracking
@@ -245,7 +247,7 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
                 name="Business Understanding Agent",
                 model=model,
                 model_settings=model_settings,
-                instructions=BUSINESS_UNDERSTANDING_ENHANCED.format(core_instruction=CORE_INSTRUCTION),
+                instructions=BUSINESS_UNDERSTANDING_ENHANCED,
                 tools=[execute_code],
                 output_type=AgentOutputSchema(output_type=AgentResult, strict_json_schema=False),
             )
@@ -254,7 +256,7 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
                 name="Data Understanding Agent", 
                 model=model,
                 model_settings=model_settings,
-                instructions=DATA_UNDERSTANDING_ENHANCED.format(core_instruction=CORE_INSTRUCTION),
+                instructions=DATA_UNDERSTANDING_ENHANCED,
                 tools=[execute_code],
                 output_type=AgentOutputSchema(output_type=AgentResult, strict_json_schema=False),
             )
@@ -263,7 +265,7 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
                 name="Data Preparation Agent",
                 model=model,
                 model_settings=model_settings,
-                instructions=DATA_PREPARATION_ENHANCED.format(core_instruction=CORE_INSTRUCTION),
+                instructions=DATA_PREPARATION_ENHANCED,
                 tools=[execute_code],
                 output_type=AgentOutputSchema(output_type=AgentResult, strict_json_schema=False),
             )
@@ -272,7 +274,7 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
                 name="Modeling Agent",
                 model=model,
                 model_settings=model_settings,
-                instructions=MODELING_ENHANCED.format(core_instruction=CORE_INSTRUCTION),
+                instructions=MODELING_ENHANCED,
                 tools=[execute_code],
                 output_type=AgentOutputSchema(output_type=AgentResult, strict_json_schema=False),
             )
@@ -281,7 +283,7 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
                 name="Evaluation Agent",
                 model=model,
                 model_settings=model_settings,
-                instructions=EVALUATION_ENHANCED.format(core_instruction=CORE_INSTRUCTION),
+                instructions=EVALUATION_ENHANCED,
                 tools=[execute_code],
                 output_type=AgentOutputSchema(output_type=AgentResult, strict_json_schema=False),
             )
@@ -290,7 +292,7 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
                 name="Deployment Agent",
                 model=model,
                 model_settings=model_settings,
-                instructions=DEPLOYMENT_ENHANCED.format(core_instruction=CORE_INSTRUCTION),
+                instructions=DEPLOYMENT_ENHANCED,
                 tools=[execute_code],
                 output_type=AgentOutputSchema(output_type=AgentResult, strict_json_schema=False),
             )
@@ -300,7 +302,7 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
                 name="Data Science Orchestration Agent",
                 model=model,
                 model_settings=model_settings,
-                instructions=ORCHESTRATOR_ENHANCED.format(core_instruction=CORE_INSTRUCTION, max_turns=MAX_TURNS),
+                instructions=ORCHESTRATOR_ENHANCED.format(max_turns=MAX_TURNS),
                 tools=[
                     as_tool_enhanced(business_understanding_agent, "business_understanding_agent", "Handles business understanding: defines objectives, success criteria, and project approach. Must specify input_file_used and output_file_created in response.", max_turns=MAX_TURNS),
                     as_tool_enhanced(data_understanding_agent, "data_understanding_agent", "Handles data understanding: loads data, explores structure, checks quality. Must specify input_file_used and output_file_created in response.", max_turns=MAX_TURNS),

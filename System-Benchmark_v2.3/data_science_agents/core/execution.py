@@ -85,21 +85,27 @@ def execute_code(ctx: RunContextWrapper, code: str) -> str:
 
 
 def _build_context_info(ctx: RunContextWrapper) -> str:
-    """Build clean context information string."""
+    """Build context information string with original prompt."""
     if not hasattr(ctx, 'context') or not ctx.context:
         return ""
     
     try:
-        available_vars = ctx.context.get_available_variables()
-        if not available_vars:
-            return ""
+        context_lines = []
         
-        # Simple, clean context
-        var_names = list(available_vars.keys())
-        if len(var_names) <= 3:
-            return f"# Available: {', '.join(var_names)}\n"
-        else:
-            return f"# Available: {', '.join(var_names[:3])}, +{len(var_names)-3} more\n"
+        # Add original prompt if available
+        if hasattr(ctx.context, 'original_prompt') and ctx.context.original_prompt:
+            context_lines.append(f"# ORIGINAL REQUEST: {ctx.context.original_prompt}")
+        
+        # Add available variables
+        available_vars = ctx.context.get_available_variables()
+        if available_vars:
+            var_names = list(available_vars.keys())
+            if len(var_names) <= 3:
+                context_lines.append(f"# Available: {', '.join(var_names)}")
+            else:
+                context_lines.append(f"# Available: {', '.join(var_names[:3])}, +{len(var_names)-3} more")
+        
+        return '\n'.join(context_lines) + '\n' if context_lines else ""
     
     except Exception:
         return ""
