@@ -1,3 +1,0 @@
-"""
-Data Science Agents package
-"""
