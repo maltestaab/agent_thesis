@@ -85,6 +85,15 @@ CORE_INSTRUCTION = (
     "\n\n"
     "11. **Balanced Execution**: Focus your efforts efficiently - avoid over-exploration while ensuring your final "
     "summary is comprehensive and detailed with specific values and actionable insights."
+    "\n\n"
+    "12. **CODE EXECUTION STRATEGY:**"
+    "- **Think First**: Before any code execution, plan what you want to accomplish"
+    "- **Avoid Repetition**: Instead of separate calls for each column, process multiple columns together"
+    "- **Turn Management**: You have limited turns - make each execution count"
+    "- 'Code executed successfully (no output to display)' means SUCCESS - move on to next step! Don't repeat the same code if it returns this message (!!)"
+    "- If you are unsure about the output use print() statements to see the output"
+    "- If you need to see a variable's value, use print(variable_name)"
+    "- If code fails, analyze the error message carefully and fix systematically"
 )
 
 # =============================================================================
@@ -159,15 +168,6 @@ WORKFLOW_MANAGEMENT_SHARED = (
     ""
     "**Next Steps**: [practical guidance for using the results]"
     "```"
-    "\n\n"
-    "**CODE EXECUTION STRATEGY:**"
-    "- **Think First**: Before any code execution, plan what you want to accomplish"
-    "- **Avoid Repetition**: Instead of separate calls for each column, process multiple columns together"
-    "- **Turn Management**: You have limited turns - make each execution count"
-    "- 'Code executed successfully (no output to display)' means SUCCESS - move on to next step"
-    "- Don't repeat the same code if it returns this message"
-    "- If you need to see a variable's value, use print(variable_name)"
-    "- If code fails, analyze the error message carefully and fix systematically"
 )
 
 # =============================================================================
