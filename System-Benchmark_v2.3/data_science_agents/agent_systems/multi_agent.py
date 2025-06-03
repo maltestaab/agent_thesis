@@ -1,5 +1,5 @@
 """
-data_science_agents/agent_systems/multi_agent.py - Enhanced multi-agent with full streaming
+data_science_agents/agent_systems/multi_agent.py - Simple multi-agent with clean output display
 """
 import time
 import streamlit as st
@@ -8,11 +8,10 @@ from typing import AsyncGenerator, Optional
 from dataclasses import dataclass
 from openai.types.responses import ResponseTextDeltaEvent
 
-from agents import Agent, Runner, ModelSettings, trace, ItemHelpers, AgentOutputSchema, function_tool, RunContextWrapper
+from agents import Agent, Runner, ModelSettings, trace, ItemHelpers, function_tool, RunContextWrapper
 from data_science_agents.core.execution import execute_code, reset_execution_state, get_created_images
 from data_science_agents.core.context import AnalysisContext 
-from data_science_agents.core.models import AgentResult
-from data_science_agents.config.settings import DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS
+from data_science_agents.config.settings import DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS, MAX_TURNS_SPECIALIST
 from data_science_agents.core.events import StreamingEvent
 from data_science_agents.core.analytics import AnalyticsTracker
 from data_science_agents.config.prompts import (
@@ -26,178 +25,244 @@ from data_science_agents.config.prompts import (
 )
 
 
-
-
-class StreamEventBroadcaster:
-    """Global event broadcaster for sub-agent streaming events""" # All agents can send their updates here, and the main system receives them all.
-    def __init__(self): # Queue for updates
-        self.queue: Optional[asyncio.Queue] = None
+def create_full_context_for_specialist(user_request: str, completed_phases: dict, current_task: str, data_file: str = None, context: AnalysisContext = None) -> str:
+    """Create comprehensive context for specialist agents"""
     
-    def set_queue(self, queue: asyncio.Queue): # Connecting broadcaster to queue
-        self.queue = queue
+    context_parts = [
+        f"ANALYSIS REQUEST: {user_request}",
+        f"ORIGINAL DATASET: {data_file}" if data_file else ""
+    ]
     
-    async def broadcast_event(self, event: StreamingEvent): # Adding event to the queue
-        if self.queue:
-            await self.queue.put(event)
-
-# Global broadcaster instantiation
-event_broadcaster = StreamEventBroadcaster()
-
-
-def as_tool_enhanced(agent: Agent, tool_name: str, tool_description: str, max_turns: int = 25): # "Orchestrator can "call" the subagents to do tasks."
-    """Adaptation of the as_tool source code to handle streaming events and max_turns for the subagents"""
+    # Add available variables/dataframes information
+    if context:
+        available_vars = context.get_available_variables()
+        if available_vars:
+            dataframe_vars = [name for name, desc in available_vars.items() 
+                            if 'DataFrame' in desc or 'pandas' in desc.lower()]
+            if dataframe_vars:
+                context_parts.append(f"\nAVAILABLE DATAFRAMES IN MEMORY:")
+                for var_name in dataframe_vars:
+                    context_parts.append(f"- {var_name}: {available_vars[var_name]}")
+                context_parts.append("\nPRIORITY: Use existing dataframes in memory rather than reloading from files when possible.")
     
-    def is_json_like(text: str) -> bool:
-        """Check if text looks like JSON structured output (to exclude them from the streaming in streamlit)"""
-        text = text.strip()
-        return (text.startswith('{') and 
-                'phase' in text and 
-                'summary' in text and
-                'key_findings' in text)
+    if completed_phases:
+        context_parts.append("\nPREVIOUS WORK COMPLETED:")
+        for phase, result in completed_phases.items():
+            context_parts.append(f"\n{phase.upper()}:")
+            context_parts.append(f"{result}")
+            context_parts.append("-" * 50)
     
-    @function_tool(
-        name_override=tool_name,
-        description_override=tool_description,
+    context_parts.extend([
+        f"\nYOUR CURRENT SPECIALIZATION FOCUS: {current_task}",
+        "\nYou have access to all the same information a single comprehensive agent would have.",
+        "Focus on your specialty area while being aware of the complete context and methodology.",
+        "Build upon previous work without repeating it."
+    ])
+    
+    return "\n".join(filter(None, context_parts))
+
+
+# Native SDK specialist agent tools
+@function_tool
+async def call_business_understanding_agent(ctx: RunContextWrapper, task_description: str) -> str:
+    """Call business understanding specialist"""
+    
+    specialist_context = create_full_context_for_specialist(
+        user_request=ctx.context.original_prompt,
+        completed_phases=getattr(ctx.context, 'completed_phases', {}),
+        current_task=task_description,
+        data_file=ctx.context.file_name,
+        context=ctx.context
     )
-    async def run_agent_enhanced(context: RunContextWrapper, input: str) -> str: # Updated version of running the subagents inside the as_tool function to handle streaming
-        """Run agent with streaming and reasoning filtering"""
-        
-        # Track agent start in analytics if available
-        if hasattr(context.context, 'analytics'):
-            context.context.analytics.start_agent(agent.name)
-        
-        # Broadcast that this sub-agent is starting
-        if event_broadcaster.queue:
-            await event_broadcaster.broadcast_event(
-                StreamingEvent(
-                    event_type="sub_agent_start",
-                    content=f"🤖 Starting {agent.name}...",
-                    timestamp=time.time(),
-                    agent_name=agent.name
-                )
-            )
-        
-        result = Runner.run_streamed(
-            agent,
-            input=input,
-            context=context.context,
-            max_turns=max_turns
-        )
-        
-        # Stream sub-agent events with JSON filtering
-        async for event in result.stream_events(): # Process all events from the subagent
-            # Check for cancellation
-            if getattr(st.session_state, 'cancel_analysis', False): # Checks if user has clicked cancel button
-                result.cancel()
-                if event_broadcaster.queue:
-                    await event_broadcaster.broadcast_event(
-                        StreamingEvent(
-                            event_type="analysis_cancelled",
-                            content="🛑 Analysis cancelled by user",
-                            timestamp=time.time(),
-                            agent_name=agent.name
-                        )
-                    )
-                return "Analysis cancelled by user"
-            
-            if not event_broadcaster.queue:
-                continue
-                
-            current_time = time.time()
-            
-            if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent): # word-by-word streaming of Agent thinking
-                if hasattr(context.context, 'analytics'):
-                    context.context.analytics.estimate_tokens_from_content(event.data.delta)
     
-                await event_broadcaster.broadcast_event(
-                    StreamingEvent(
-                        event_type="text_delta",
-                        content=event.data.delta,
-                        timestamp=current_time,
-                        agent_name=agent.name
-                    )
-                )
-                
-            elif event.type == "run_item_stream_event": # Streaming of the subagent's tool calls and outputs
-                if event.item.type == "tool_call_item":
-                    # Track tool call in analytics
-                    if hasattr(context.context, 'analytics'):
-                        context.context.analytics.add_tool_call(agent.name)
-                    
-                    await event_broadcaster.broadcast_event(
-                        StreamingEvent(
-                            event_type="tool_call",
-                            content=f"🔧 {agent.name} executing code...",
-                            timestamp=current_time,
-                            agent_name=agent.name
-                        )
-                    )
-                    
-                elif event.item.type == "tool_call_output_item": # Code execution output
-                    output_preview = str(event.item.output)[:150] + "..." if len(str(event.item.output)) > 150 else str(event.item.output)
-                    await event_broadcaster.broadcast_event(
-                        StreamingEvent(
-                            event_type="tool_output",
-                            content=f"📊 {agent.name} result:\n{output_preview}",
-                            timestamp=current_time,
-                            agent_name=agent.name
-                        )
-                    )
-                    
-                elif event.item.type == "message_output_item": # Agent complete thought/message
-                    # FILTER JSON FROM REASONING
-                    message_text = ItemHelpers.text_message_output(event.item)
-                    
-                    # Skip if this looks like structured JSON output (to keep streaming clean in streamlit)
-                    if is_json_like(message_text):
-                        # Instead of showing raw JSON, show a clean completion message
-                        await event_broadcaster.broadcast_event(
-                            StreamingEvent(
-                                event_type="agent_result",
-                                content=f"✅ {agent.name} completed analysis and provided structured results",
-                                timestamp=current_time,
-                                agent_name=agent.name
-                            )
-                        )
-                    elif message_text.strip():
-                        # Actual reasoning part of the agent's output that is not JSON
-                        await event_broadcaster.broadcast_event(
-                            StreamingEvent(
-                                event_type="agent_reasoning",
-                                content=f"🤔 {agent.name}: {message_text}",
-                                timestamp=current_time,
-                                agent_name=agent.name
-                            )
-                        )
-        
-        # Finish agent tracking in analytics
-        if hasattr(context.context, 'analytics'):
-            context.context.analytics.finish_agent(agent.name)
-        
-        # Broadcast completion. Tells that specialist agent has completed their task.
-        if event_broadcaster.queue:
-            await event_broadcaster.broadcast_event(
-                StreamingEvent(
-                    event_type="sub_agent_complete",
-                    content=f"✅ {agent.name} completed",
-                    timestamp=time.time(),
-                    agent_name=agent.name
-                )
-            )
-        
-        return str(result.final_output) # Return the final output of the subagent to the orchestrator
+    result = await Runner.run(
+        business_understanding_agent,
+        input=specialist_context,
+        max_turns=MAX_TURNS_SPECIALIST,
+        context=ctx.context
+    )
     
-    return run_agent_enhanced
+    # Track completion
+    if not hasattr(ctx.context, 'completed_phases'):
+        ctx.context.completed_phases = {}
+    
+    ctx.context.completed_phases["Business Understanding"] = str(result.final_output)
+    
+    # Track analytics
+    if hasattr(ctx.context, 'analytics'):
+        ctx.context.analytics.add_tool_call("Business Understanding Agent")
+    
+    return str(result.final_output)
+
+
+@function_tool
+async def call_data_understanding_agent(ctx: RunContextWrapper, task_description: str) -> str:
+    """Call data understanding specialist"""
+    
+    specialist_context = create_full_context_for_specialist(
+        user_request=ctx.context.original_prompt,
+        completed_phases=getattr(ctx.context, 'completed_phases', {}),
+        current_task=task_description,
+        data_file=ctx.context.file_name,
+        context=ctx.context
+    )
+    
+    result = await Runner.run(
+        data_understanding_agent,
+        input=specialist_context,
+        max_turns=MAX_TURNS_SPECIALIST,
+        context=ctx.context
+    )
+    
+    # Track completion
+    if not hasattr(ctx.context, 'completed_phases'):
+        ctx.context.completed_phases = {}
+        
+    ctx.context.completed_phases["Data Understanding"] = str(result.final_output)
+    
+    # Track analytics
+    if hasattr(ctx.context, 'analytics'):
+        ctx.context.analytics.add_tool_call("Data Understanding Agent")
+    
+    return str(result.final_output)
+
+
+@function_tool
+async def call_data_preparation_agent(ctx: RunContextWrapper, task_description: str) -> str:
+    """Call data preparation specialist"""
+    
+    specialist_context = create_full_context_for_specialist(
+        user_request=ctx.context.original_prompt,
+        completed_phases=getattr(ctx.context, 'completed_phases', {}),
+        current_task=task_description,
+        data_file=ctx.context.file_name,
+        context=ctx.context
+    )
+    
+    result = await Runner.run(
+        data_preparation_agent,
+        input=specialist_context,
+        max_turns=MAX_TURNS_SPECIALIST,
+        context=ctx.context
+    )
+    
+    # Track completion
+    if not hasattr(ctx.context, 'completed_phases'):
+        ctx.context.completed_phases = {}
+        
+    ctx.context.completed_phases["Data Preparation"] = str(result.final_output)
+    
+    # Track analytics
+    if hasattr(ctx.context, 'analytics'):
+        ctx.context.analytics.add_tool_call("Data Preparation Agent")
+    
+    return str(result.final_output)
+
+
+@function_tool
+async def call_modeling_agent(ctx: RunContextWrapper, task_description: str) -> str:
+    """Call modeling specialist"""
+    
+    specialist_context = create_full_context_for_specialist(
+        user_request=ctx.context.original_prompt,
+        completed_phases=getattr(ctx.context, 'completed_phases', {}),
+        current_task=task_description,
+        data_file=ctx.context.file_name,
+        context=ctx.context
+    )
+    
+    result = await Runner.run(
+        modeling_agent,
+        input=specialist_context,
+        max_turns=MAX_TURNS_SPECIALIST,
+        context=ctx.context
+    )
+    
+    # Track completion
+    if not hasattr(ctx.context, 'completed_phases'):
+        ctx.context.completed_phases = {}
+        
+    ctx.context.completed_phases["Modeling"] = str(result.final_output)
+    
+    # Track analytics
+    if hasattr(ctx.context, 'analytics'):
+        ctx.context.analytics.add_tool_call("Modeling Agent")
+    
+    return str(result.final_output)
+
+
+@function_tool
+async def call_evaluation_agent(ctx: RunContextWrapper, task_description: str) -> str:
+    """Call evaluation specialist"""
+    
+    specialist_context = create_full_context_for_specialist(
+        user_request=ctx.context.original_prompt,
+        completed_phases=getattr(ctx.context, 'completed_phases', {}),
+        current_task=task_description,
+        data_file=ctx.context.file_name,
+        context=ctx.context
+    )
+    
+    result = await Runner.run(
+        evaluation_agent,
+        input=specialist_context,
+        max_turns=MAX_TURNS_SPECIALIST,
+        context=ctx.context
+    )
+    
+    # Track completion
+    if not hasattr(ctx.context, 'completed_phases'):
+        ctx.context.completed_phases = {}
+        
+    ctx.context.completed_phases["Evaluation"] = str(result.final_output)
+    
+    # Track analytics
+    if hasattr(ctx.context, 'analytics'):
+        ctx.context.analytics.add_tool_call("Evaluation Agent")
+    
+    return str(result.final_output)
+
+
+@function_tool
+async def call_deployment_agent(ctx: RunContextWrapper, task_description: str) -> str:
+    """Call deployment specialist"""
+    
+    specialist_context = create_full_context_for_specialist(
+        user_request=ctx.context.original_prompt,
+        completed_phases=getattr(ctx.context, 'completed_phases', {}),
+        current_task=task_description,
+        data_file=ctx.context.file_name,
+        context=ctx.context
+    )
+    
+    result = await Runner.run(
+        deployment_agent,
+        input=specialist_context,
+        max_turns=MAX_TURNS_SPECIALIST,
+        context=ctx.context
+    )
+    
+    # Track completion
+    if not hasattr(ctx.context, 'completed_phases'):
+        ctx.context.completed_phases = {}
+        
+    ctx.context.completed_phases["Deployment"] = str(result.final_output)
+    
+    # Track analytics
+    if hasattr(ctx.context, 'analytics'):
+        ctx.context.analytics.add_tool_call("Deployment Agent")
+    
+    return str(result.final_output)
 
 
 async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int = MAX_TURNS, model: str = DEFAULT_MODEL) -> AsyncGenerator[StreamingEvent, None]:
     """
-    Run a complete data science analysis with full streaming visibility. (Run on click in streamlit)
+    Run multi-agent analysis with simple, clean output display.
     
-    Shows both orchestrator thinking and all sub-agent activities in real-time.
+    Focus: Show specialist work clearly, then final summary.
     """
     
-    # Reset execution environment for clean start
+    # Reset execution environment
     reset_execution_state()
     
     # Create analysis context
@@ -210,110 +275,94 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
     
     # Initialize analytics tracking
     analytics = AnalyticsTracker()
-    context.analytics = analytics  # Attach to context
+    context.analytics = analytics
+    context.completed_phases = {}
     analytics.start_agent("Orchestrator")
-    
-    # Create event queue for sub-agent events and connect broadcaster
-    sub_agent_queue = asyncio.Queue()
-    event_broadcaster.set_queue(sub_agent_queue)
     
     # Yield initial status
     yield StreamingEvent(
         event_type="analysis_start",
-        content="🚀 Starting enhanced multi-agent analysis with full streaming...",
+        content="🚀 Starting multi-agent analysis...",
         timestamp=context.start_time
     )
     
-    # Yield analytics start event
-    yield StreamingEvent(
-        event_type="analytics_start",
-        content=f"📊 Analytics tracking started",
-        timestamp=time.time(),
-        agent_name="System"
-    )
-    
-    current_agent = "Orchestrator"
-    
     try:
         with trace("Multi-Agent Data Science Analysis"):
-            # Create agents with selected model
+            # Create model settings
             model_settings = ModelSettings(
                 temperature=DEFAULT_TEMPERATURE,
                 top_p=DEFAULT_TOP_P
             )
 
-            # Create specialized CRISP-DM agents with selected model
-            business_understanding_agent = Agent[AnalysisContext](
+            # Create specialized agents - globals for tool functions to use
+            global business_understanding_agent, data_understanding_agent, data_preparation_agent
+            global modeling_agent, evaluation_agent, deployment_agent
+            
+            business_understanding_agent = Agent(
                 name="Business Understanding Agent",
                 model=model,
                 model_settings=model_settings,
                 instructions=BUSINESS_UNDERSTANDING_ENHANCED,
                 tools=[execute_code],
-                output_type=AgentOutputSchema(output_type=AgentResult, strict_json_schema=False),
             )
 
-            data_understanding_agent = Agent[AnalysisContext](
+            data_understanding_agent = Agent(
                 name="Data Understanding Agent", 
                 model=model,
                 model_settings=model_settings,
                 instructions=DATA_UNDERSTANDING_ENHANCED,
                 tools=[execute_code],
-                output_type=AgentOutputSchema(output_type=AgentResult, strict_json_schema=False),
             )
 
-            data_preparation_agent = Agent[AnalysisContext](
+            data_preparation_agent = Agent(
                 name="Data Preparation Agent",
                 model=model,
                 model_settings=model_settings,
                 instructions=DATA_PREPARATION_ENHANCED,
                 tools=[execute_code],
-                output_type=AgentOutputSchema(output_type=AgentResult, strict_json_schema=False),
             )
 
-            modeling_agent = Agent[AnalysisContext](
+            modeling_agent = Agent(
                 name="Modeling Agent",
                 model=model,
                 model_settings=model_settings,
                 instructions=MODELING_ENHANCED,
                 tools=[execute_code],
-                output_type=AgentOutputSchema(output_type=AgentResult, strict_json_schema=False),
             )
 
-            evaluation_agent = Agent[AnalysisContext](
+            evaluation_agent = Agent(
                 name="Evaluation Agent",
                 model=model,
                 model_settings=model_settings,
                 instructions=EVALUATION_ENHANCED,
                 tools=[execute_code],
-                output_type=AgentOutputSchema(output_type=AgentResult, strict_json_schema=False),
             )
 
-            deployment_agent = Agent[AnalysisContext](
+            deployment_agent = Agent(
                 name="Deployment Agent",
                 model=model,
                 model_settings=model_settings,
                 instructions=DEPLOYMENT_ENHANCED,
                 tools=[execute_code],
-                output_type=AgentOutputSchema(output_type=AgentResult, strict_json_schema=False),
             )
 
-            # Create orchestrator agent with selected model
-            orchestration_agent = Agent[AnalysisContext](
+            # Create orchestrator agent
+            orchestration_agent = Agent(
                 name="Data Science Orchestration Agent",
                 model=model,
                 model_settings=model_settings,
-                instructions=ORCHESTRATOR_ENHANCED.format(max_turns=MAX_TURNS),
+                instructions=ORCHESTRATOR_ENHANCED,
                 tools=[
-                    as_tool_enhanced(business_understanding_agent, "business_understanding_agent", "Handles business understanding: defines objectives, success criteria, and project approach. Must specify input_file_used and output_file_created in response.", max_turns=MAX_TURNS),
-                    as_tool_enhanced(data_understanding_agent, "data_understanding_agent", "Handles data understanding: loads data, explores structure, checks quality. Must specify input_file_used and output_file_created in response.", max_turns=MAX_TURNS),
-                    as_tool_enhanced(data_preparation_agent, "data_preparation_agent", "Handles data preparation: cleans data, creates features, prepares for modeling. Must specify input_file_used and output_file_created in response.", max_turns=MAX_TURNS),
-                    as_tool_enhanced(modeling_agent, "modeling_agent", "Handles modeling: builds and evaluates models. Must specify input_file_used and output_file_created in response.", max_turns=MAX_TURNS),
-                    as_tool_enhanced(evaluation_agent, "evaluation_agent", "Handles evaluation: assesses results against business criteria, provides insights. Must specify input_file_used and output_file_created in response.", max_turns=MAX_TURNS),
-                    as_tool_enhanced(deployment_agent, "deployment_agent", "Handles deployment planning: creates deployment strategy and documentation. Must specify input_file_used and output_file_created in response.", max_turns=MAX_TURNS)
+                    call_business_understanding_agent,
+                    call_data_understanding_agent,
+                    call_data_preparation_agent,
+                    call_modeling_agent,
+                    call_evaluation_agent,
+                    call_deployment_agent
                 ]
             )
 
-            # Run orchestrator with streaming
+            # Run orchestrator with simple streaming
             result = Runner.run_streamed(
                 orchestration_agent,
                 input=prompt,
@@ -321,51 +370,67 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
                 max_turns=max_turns
             )
             
-            # Simple direct streaming of the events
+            # Simple streaming - just orchestrator thinking and tool calls
             async for event in result.stream_events():
+                # Check for cancellation
+                if getattr(st.session_state, 'cancel_analysis', False):
+                    result.cancel()
+                    yield StreamingEvent(
+                        event_type="analysis_cancelled",
+                        content="🛑 Analysis cancelled by user",
+                        timestamp=time.time(),
+                        agent_name="Orchestrator"
+                    )
+                    return
+                
                 current_time = time.time()
                 
-                # Handle orchestrator events
+                # Stream only key events
                 if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+                    # Estimate tokens for cost tracking
+                    analytics.estimate_tokens_from_content(event.data.delta)
+                    
                     yield StreamingEvent(
                         event_type="text_delta",
                         content=event.data.delta,
                         timestamp=current_time,
-                        agent_name=current_agent
+                        agent_name="Orchestrator"
                     )
                     
                 elif event.type == "run_item_stream_event":
                     if event.item.type == "tool_call_item":
-                        # Track orchestrator tool calls (calling sub-agents)
+                        # Track tool calls
                         analytics.add_tool_call("Orchestrator")
                         
-                        tool_name = getattr(event.item, 'name', 'unknown_tool')
+                        # Get tool name
+                        tool_name = 'unknown_tool'
+                        if hasattr(event.item, 'raw_item') and hasattr(event.item.raw_item, 'function'):
+                            tool_name = getattr(event.item.raw_item.function, 'name', 'unknown_tool')
+                        
                         if 'agent' in tool_name:
-                            agent_display_name = tool_name.replace('_agent', ' Agent').title()
+                            agent_display_name = tool_name.replace('call_', '').replace('_agent', '').replace('_', ' ').title()
                             yield StreamingEvent(
                                 event_type="tool_call",
-                                content=f"🤖 Orchestrator calling {agent_display_name}...",
+                                content=f"🤖 Starting {agent_display_name} Agent...",
                                 timestamp=current_time,
-                                agent_name=current_agent
+                                agent_name="Orchestrator"
                             )
                     
                     elif event.item.type == "tool_call_output_item":
-                        yield StreamingEvent(
-                            event_type="tool_output",
-                            content="🔄 Sub-agent completed, orchestrator continuing...",
-                            timestamp=current_time,
-                            agent_name=current_agent
-                        )
-                
-                # Check for sub-agent events (non-blocking)
-                try:
-                    while True:
-                        sub_event = sub_agent_queue.get_nowait()
-                        yield sub_event
-                except asyncio.QueueEmpty:
-                    pass
-            
-            # Finish analytics tracking
+                        # Get the tool output content
+                        output_content = getattr(event.item, 'output', '')
+                        
+                        if output_content and len(output_content) > 50:
+                            # Show brief summary
+                            summary = output_content[:80] + "..." if len(output_content) > 80 else output_content
+                            yield StreamingEvent(
+                                event_type="tool_output",
+                                content=f"✅ Completed: {summary}",
+                                timestamp=current_time,
+                                agent_name="Orchestrator"
+                            )
+
+            # Finish analytics
             analytics.finish_agent("Orchestrator")
             analytics.finish()
 
@@ -374,23 +439,52 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
             for img in images:
                 analytics.add_image(img)
 
-            # Yield analytics summary
-            analytics_summary = analytics.get_summary()
-            yield StreamingEvent(
-                event_type="analytics_complete",
-                content=f"📊 Analytics: {analytics_summary['total_duration']:.1f}s, {analytics_summary['tool_calls']} tools, {analytics_summary['phases_completed']} phases, ${analytics_summary['estimated_cost']:.4f}",
-                timestamp=time.time(),
-                agent_name="System"
-            )
-            
-            # Final completion event
+            # Show final summary
             total_duration = time.time() - context.start_time
             
             yield StreamingEvent(
                 event_type="analysis_complete",
-                content=f"✅ Enhanced multi-agent analysis completed in {total_duration:.1f}s!\n\n📊 Final Results:\n{result.final_output}\n\n📸 Created {len(images)} visualizations",
+                content=f"✅ Multi-agent analysis completed in {total_duration:.1f}s!\n\n📊 **Final Results:**\n{result.final_output}\n\n📸 Created {len(images)} visualizations",
                 timestamp=time.time(),
                 agent_name="Orchestrator"
+            )
+            
+            # Now show specialist agent work clearly
+            if hasattr(context, 'completed_phases') and context.completed_phases:
+                yield StreamingEvent(
+                    event_type="text_delta",
+                    content="\n\n---\n\n## 🔍 **Specialist Agent Work:**\n\n",
+                    timestamp=time.time(),
+                    agent_name="System"
+                )
+                
+                agent_display = {
+                    "Business Understanding": "🎯 Business Understanding Agent",
+                    "Data Understanding": "📊 Data Understanding Agent", 
+                    "Data Preparation": "🔧 Data Preparation Agent",
+                    "Modeling": "🤖 Modeling Agent",
+                    "Evaluation": "📈 Evaluation Agent", 
+                    "Deployment": "🚀 Deployment Agent"
+                }
+                
+                for phase_name, phase_output in context.completed_phases.items():
+                    if phase_output and phase_output.strip():
+                        display_name = agent_display.get(phase_name, f"🔹 {phase_name}")
+                        
+                        yield StreamingEvent(
+                            event_type="text_delta",
+                            content=f"\n### {display_name}:\n{phase_output.strip()}\n\n",
+                            timestamp=time.time(),
+                            agent_name=phase_name
+                        )
+            
+            # Analytics summary
+            analytics_summary = analytics.get_summary()
+            yield StreamingEvent(
+                event_type="analytics_complete",
+                content=f"\n---\n\n📊 **Analytics:** {analytics_summary['total_duration']:.1f}s, {analytics_summary['tool_calls']} tools, {analytics_summary['phases_completed']} phases, ${analytics_summary['estimated_cost']:.4f}",
+                timestamp=time.time(),
+                agent_name="System"
             )
             
     except Exception as e:
@@ -402,12 +496,9 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
             event_type="analysis_error",
             content=f"❌ Multi-agent analysis failed: {str(e)}",
             timestamp=time.time(),
-            agent_name=current_agent
+            agent_name="Orchestrator"
         )
     finally:
         # Ensure analytics is always finished
         if analytics and not analytics.end_time:
             analytics.finish()
-        
-        # Clean up broadcaster
-        event_broadcaster.set_queue(None)

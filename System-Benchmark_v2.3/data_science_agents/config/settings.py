@@ -1,5 +1,5 @@
 """
-data_science_agents/config/settings.py - Simple configuration settings
+data_science_agents/config/settings.py - Simple configuration settings with optimized limits
 """
 import os
 
@@ -8,10 +8,12 @@ DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
 DEFAULT_TEMPERATURE = float(os.getenv("DEFAULT_TEMPERATURE", "0.5"))
 DEFAULT_TOP_P = float(os.getenv("DEFAULT_TOP_P", "0.5"))
 
-# Analysis limits
+# Analysis limits - balanced for comprehensive tasks and comparability
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "100000"))
-MAX_TURNS = int(os.getenv("MAX_TURNS", "50"))
-MAX_TURNS_SINGLE = int(os.getenv("MAX_TURNS_SINGLE", "250"))
+MAX_TURNS = int(os.getenv("MAX_TURNS", "15"))  # Orchestrator turns
+MAX_TURNS_SINGLE = int(os.getenv("MAX_TURNS_SINGLE", "100"))  # Single agent total
+MAX_TURNS_SPECIALIST = int(os.getenv("MAX_TURNS_SPECIALIST", "40"))  # Specialist agents
+# Multi-agent total potential: 8 (orchestrator) + 6 phases × 6 turns = 44 turns (comparable to single agent)
 
 # File handling
 SUPPORTED_FILE_TYPES = ["csv", "xlsx", "xls"]

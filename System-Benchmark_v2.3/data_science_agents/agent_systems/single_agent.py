@@ -1,5 +1,5 @@
 """
-data_science_agents/agent_systems/single_agent.py - Single agent system
+data_science_agents/agent_systems/single_agent.py - Single agent system with updated limits
 """
 import time
 import streamlit as st
@@ -30,7 +30,7 @@ async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int 
     Args:
         prompt: The analysis request/prompt
         file_name: Name of the data file being analyzed
-        max_turns: Maximum number of turns for the agent
+        max_turns: Maximum number of turns for the agent (now optimized)
         model: AI model to use for analysis
         
     Yields:
@@ -50,6 +50,7 @@ async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int 
     
     # Initialize analytics tracking
     analytics = AnalyticsTracker()
+    context.analytics = analytics  # Attach to context
     analytics.start_agent("Data Science Agent")
     
     # Yield initial status
@@ -62,7 +63,7 @@ async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int 
     # Yield analytics start event
     yield StreamingEvent(
         event_type="analytics_start",
-        content=f"📊 Analytics tracking started",
+        content="📊 Analytics tracking started",
         timestamp=time.time(),
         agent_name="System"
     )
@@ -71,7 +72,7 @@ async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int 
         # Use SDK's built-in tracing for proper monitoring
         with trace("Single Agent Data Science Analysis"):
             # Create agent with selected model
-            data_science_agent = Agent[AnalysisContext](
+            data_science_agent = Agent(
                 name="Data Science Agent",
                 model=model,
                 model_settings=ModelSettings(

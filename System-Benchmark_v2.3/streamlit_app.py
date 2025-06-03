@@ -65,7 +65,7 @@ def create_streaming_ui():
     streaming_container = st.container()
     
     with streaming_container:
-        st.subheader("Live Analysis Progress")
+        st.subheader("Analysis Progress")
         
         # Create columns for different types of updates
         col1, col2 = st.columns([2, 1])
@@ -328,7 +328,7 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
     st.markdown("---")
     
     # Create live analytics at the top
-    st.subheader("📊 Live Analytics")
+    st.subheader("📊 Analytics")
     analytics_col1, analytics_col2, analytics_col3, analytics_col4 = st.columns(4)
     with analytics_col1:
         duration_metric = st.empty()

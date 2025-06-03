@@ -1,5 +1,5 @@
 """
-data_science_agents/core/execution.py - Improved execution engine with cleaner code
+data_science_agents/core/execution.py - Enhanced execution engine with dataframe continuity
 """
 import pandas as pd
 import numpy as np
@@ -55,7 +55,7 @@ def reset_execution_state():
 @function_tool # Decorator to make the function a tool that can be used by the agents
 def execute_code(ctx: RunContextWrapper, code: str) -> str:
     """
-    Execute Python code with context awareness.
+    Execute Python code with enhanced context awareness and dataframe continuity.
     
     Args:
         ctx: Analysis context for state management  
@@ -65,8 +65,8 @@ def execute_code(ctx: RunContextWrapper, code: str) -> str:
         Execution results and output
     """
     try:
-        # Build clean context info
-        context_info = _build_context_info(ctx)
+        # Build enhanced context info
+        context_info = _build_enhanced_context_info(ctx)
         
         # Track images before execution
         images_before = _get_current_images()
@@ -84,8 +84,8 @@ def execute_code(ctx: RunContextWrapper, code: str) -> str:
         return _format_error(e)
 
 
-def _build_context_info(ctx: RunContextWrapper) -> str:
-    """Build context information string with original prompt."""
+def _build_enhanced_context_info(ctx: RunContextWrapper) -> str:
+    """Build enhanced context information with dataframe awareness."""
     if not hasattr(ctx, 'context') or not ctx.context:
         return ""
     
@@ -96,14 +96,21 @@ def _build_context_info(ctx: RunContextWrapper) -> str:
         if hasattr(ctx.context, 'original_prompt') and ctx.context.original_prompt:
             context_lines.append(f"# ORIGINAL REQUEST: {ctx.context.original_prompt}")
         
-        # Add available variables
+        # Add available variables with special focus on dataframes
         available_vars = ctx.context.get_available_variables()
         if available_vars:
-            var_names = list(available_vars.keys())
-            if len(var_names) <= 3:
-                context_lines.append(f"# Available: {', '.join(var_names)}")
-            else:
-                context_lines.append(f"# Available: {', '.join(var_names[:3])}, +{len(var_names)-3} more")
+            dataframe_vars = [name for name, desc in available_vars.items() 
+                            if 'DataFrame' in desc]
+            other_vars = [name for name in available_vars.keys() if name not in dataframe_vars]
+            
+            if dataframe_vars:
+                context_lines.append(f"# AVAILABLE DATAFRAMES: {', '.join(dataframe_vars)} (use these instead of reloading)")
+            
+            if other_vars:
+                if len(other_vars) <= 3:
+                    context_lines.append(f"# OTHER VARIABLES: {', '.join(other_vars)}")
+                else:
+                    context_lines.append(f"# OTHER VARIABLES: {', '.join(other_vars[:3])}, +{len(other_vars)-3} more")
         
         return '\n'.join(context_lines) + '\n' if context_lines else ""
     
@@ -126,20 +133,34 @@ def _execute_with_capture(code: str) -> str:
     
     try:
         sys.stdout = captured_output
+        
+        # Execute the code
         exec(code, execution_namespace)
         
-        # Check if the last line is a variable reference and show its value
+        # Check if the last line is an expression that should show output
         lines = code.strip().split('\n')
         if lines:
             last_line = lines[-1].strip()
-            # If last line is just a variable name, show its value
-            if (last_line and 
-                last_line.isidentifier() and 
-                last_line in execution_namespace and 
-                not last_line.startswith('_')):
-                
-                value = execution_namespace[last_line]
-                print(f"{last_line} = {repr(value)}")
+            
+            # Handle tuple expressions like "var1, var2, var3"
+            if last_line and not last_line.startswith('#') and (',' in last_line or last_line.isidentifier()):
+                try:
+                    # Try to evaluate the expression and print it
+                    result = eval(last_line, execution_namespace)
+                    
+                    # Format the result nicely
+                    if isinstance(result, tuple):
+                        print("Results:")
+                        for i, item in enumerate(result):
+                            print(f"Item {i+1}:")
+                            print(item)
+                            print("-" * 30)
+                    else:
+                        print(f"Result: {result}")
+                        
+                except Exception:
+                    # If evaluation fails, just continue
+                    pass
         
         return captured_output.getvalue()
     finally:
@@ -208,7 +229,7 @@ def get_created_images():
 
 
 def get_available_variables():
-    """Get dictionary of available variables in the execution namespace"""
+    """Get dictionary of available variables in the execution namespace with enhanced dataframe info"""
     user_vars = {}
     core_imports = {'pd', 'np', 'stats', 'plt', 'sns'}
     
@@ -217,8 +238,10 @@ def get_available_variables():
             continue
             
         try:
-            # Get concise variable description
-            if hasattr(value, 'shape'):
+            # Enhanced descriptions for dataframes
+            if isinstance(value, pd.DataFrame):
+                user_vars[name] = f"DataFrame({value.shape[0]}x{value.shape[1]})"
+            elif hasattr(value, 'shape'):
                 user_vars[name] = f"{type(value).__name__}({value.shape})"
             elif hasattr(value, '__len__') and not isinstance(value, str):
                 user_vars[name] = f"{type(value).__name__}[{len(value)}]"
@@ -228,3 +251,26 @@ def get_available_variables():
             user_vars[name] = type(value).__name__
     
     return user_vars
+
+
+def get_dataframe_variables():
+    """Get dictionary of only dataframe variables for easy identification"""
+    dataframe_vars = {}
+    core_imports = {'pd', 'np', 'stats', 'plt', 'sns'}
+    
+    for name, value in execution_namespace.items():
+        if name.startswith('_') or name in core_imports:
+            continue
+            
+        if isinstance(value, pd.DataFrame):
+            try:
+                dataframe_vars[name] = {
+                    'shape': value.shape,
+                    'columns': list(value.columns),
+                    'dtypes': value.dtypes.to_dict(),
+                    'description': f"DataFrame({value.shape[0]}x{value.shape[1]})"
+                }
+            except Exception:
+                dataframe_vars[name] = {'description': "DataFrame(unknown shape)"}
+    
+    return dataframe_vars
