@@ -2,7 +2,7 @@
 data_science_agents/config/prompts.py - Enhanced prompts with specialist autonomy
 """
 
-from data_science_agents.config.settings import MAX_TURNS
+
 
 # Analysis prompt template (keeping original structure)
 ANALYSIS_PROMPT_TEMPLATE = (
@@ -17,7 +17,6 @@ ANALYSIS_PROMPT_TEMPLATE = (
     "- Load data with appropriate pandas function based on file type"
     "- Follow a structured data science methodology"
     "- The dataset is available in the current working directory"
-    "- Maximum tokens allowed: {max_tokens}"
     "\n\n"
     "CRITICAL: Before writing your final summary, execute code to retrieve and print all "
     "calculated metrics, feature analysis results, and reference any created images. "
@@ -484,7 +483,7 @@ ORCHESTRATOR_ENHANCED = (
     "You coordinate specialist agents to complete the analysis. Your job is intelligent delegation, context management, comprehensive synthesis, and requirement fulfillment."
     "\n\n"
     "**ORCHESTRATOR TURN BUDGET AWARENESS:**"
-    "You have 15 turns total to coordinate the entire analysis. Each specialist you call also has their own turn budget."
+    "You have 10 turns total to coordinate the entire analysis. Each specialist you call also has their own turn budget."
     "Plan your orchestration efficiently - decide which specialists are needed and call them strategically."
     "Don't call specialists unnecessarily. Focus on phases that add value to the specific user request."
     "\n\n"
@@ -542,7 +541,7 @@ ORCHESTRATOR_ENHANCED = (
     "- Only be specific if the user explicitly requested particular methods"
     "\n\n"
     "**TURN MANAGEMENT STRATEGY:**"
-    "- Each specialist has 40 turns available"
+    "- Each specialist has 50 turns available"
     "- If a specialist hits their turn limit but hasn't completed their task, you can call them again with a follow-up request"
     "- Use your judgment: recall if making good progress, move on if stuck or task is complete enough"
     "- Aim to complete each phase efficiently but thoroughly"

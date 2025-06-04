@@ -12,7 +12,7 @@ from agents import Agent, Runner, ModelSettings, trace, ItemHelpers
 from data_science_agents.core.execution import execute_code, reset_execution_state, get_created_images
 from data_science_agents.core.context import AnalysisContext
 from data_science_agents.config.prompts import SINGLE_AGENT_ENHANCED
-from data_science_agents.config.settings import DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS_SINGLE, MAX_TOKENS
+from data_science_agents.config.settings import DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS_SINGLE
 from data_science_agents.core.events import StreamingEvent
 from data_science_agents.core.analytics import AnalyticsTracker
 

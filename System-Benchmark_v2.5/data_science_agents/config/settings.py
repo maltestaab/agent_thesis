@@ -9,7 +9,6 @@ DEFAULT_TEMPERATURE = float(os.getenv("DEFAULT_TEMPERATURE", "0.5"))
 DEFAULT_TOP_P = float(os.getenv("DEFAULT_TOP_P", "0.5"))
 
 # Analysis limits - balanced for comprehensive tasks and comparability
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", "100000"))
 MAX_TURNS = int(os.getenv("MAX_TURNS", "10"))  # Orchestrator turns
 MAX_TURNS_SINGLE = int(os.getenv("MAX_TURNS_SINGLE", "500"))  # Single agent total
 MAX_TURNS_SPECIALIST = int(os.getenv("MAX_TURNS_SPECIALIST", "50"))  # Specialist agents
