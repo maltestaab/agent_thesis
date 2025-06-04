@@ -10,10 +10,9 @@ DEFAULT_TOP_P = float(os.getenv("DEFAULT_TOP_P", "0.5"))
 
 # Analysis limits - balanced for comprehensive tasks and comparability
 MAX_TOKENS = int(os.getenv("MAX_TOKENS", "100000"))
-MAX_TURNS = int(os.getenv("MAX_TURNS", "15"))  # Orchestrator turns
-MAX_TURNS_SINGLE = int(os.getenv("MAX_TURNS_SINGLE", "100"))  # Single agent total
-MAX_TURNS_SPECIALIST = int(os.getenv("MAX_TURNS_SPECIALIST", "40"))  # Specialist agents
-# Multi-agent total potential: 8 (orchestrator) + 6 phases × 6 turns = 44 turns (comparable to single agent)
+MAX_TURNS = int(os.getenv("MAX_TURNS", "10"))  # Orchestrator turns
+MAX_TURNS_SINGLE = int(os.getenv("MAX_TURNS_SINGLE", "500"))  # Single agent total
+MAX_TURNS_SPECIALIST = int(os.getenv("MAX_TURNS_SPECIALIST", "50"))  # Specialist agents
 
 # File handling
 SUPPORTED_FILE_TYPES = ["csv", "xlsx", "xls"]
