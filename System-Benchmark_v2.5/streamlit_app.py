@@ -38,7 +38,7 @@ load_dotenv()
 from data_science_agents.agent_systems.single_agent import run_single_agent_analysis
 from data_science_agents.agent_systems.multi_agent import run_multi_agent_analysis
 from data_science_agents.core.execution import get_created_images
-from data_science_agents.config.settings import MAX_TOKENS, SUPPORTED_FILE_TYPES
+from data_science_agents.config.settings import SUPPORTED_FILE_TYPES
 from data_science_agents.config.prompts import ANALYSIS_PROMPT_TEMPLATE
 
 
