@@ -1,46 +1,106 @@
 """
-data_science_agents/agent_systems/single_agent.py - Single agent system with updated limits
+data_science_agents/agent_systems/single_agent.py - Simplified single agent system
+
+This module implements the single-agent approach to data science analysis where
+one comprehensive agent handles all phases of the CRISP-DM methodology within
+a single conversation flow.
+
+SIMPLIFICATIONS MADE:
+- Analytics helpers eliminate duplicate setup/teardown code
+- Event helpers eliminate duplicate StreamingEvent creation  
+- Centralized error handling with consistent patterns
+- Standardized imports and configuration
+
+The single agent approach offers:
+1. Simpler orchestration (no inter-agent coordination needed)
+2. Better context retention (one continuous conversation)
+3. More flexible phase selection (can skip irrelevant phases)
+4. Faster execution (no handoff overhead)
+
+Trade-offs:
+- Less specialized expertise per phase
+- Potential for longer individual responses
+- Single point of failure (if agent gets stuck)
 """
 import time
 import streamlit as st
-
 from typing import AsyncGenerator
-from dataclasses import dataclass
 from openai.types.responses import ResponseTextDeltaEvent
 
 from agents import Agent, Runner, ModelSettings, trace, ItemHelpers
+
+# Core system imports
 from data_science_agents.core.execution import execute_code, reset_execution_state, get_created_images
 from data_science_agents.core.context import AnalysisContext
+from data_science_agents.core.analytics import setup_analytics, create_analytics_summary_event
+from data_science_agents.core.events import (
+    create_analysis_start_event, create_analysis_complete_event,
+    create_error_event, create_cancellation_event, create_event,
+    create_tool_call_event, create_tool_output_event
+)
+
+# Configuration imports
 from data_science_agents.config.prompts import SINGLE_AGENT_ENHANCED
-from data_science_agents.config.settings import DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS_SINGLE
-from data_science_agents.core.events import StreamingEvent
-from data_science_agents.core.analytics import AnalyticsTracker
+from data_science_agents.config.settings import (
+    DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS_SINGLE
+)
 
 
-async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int = MAX_TURNS_SINGLE, model: str = DEFAULT_MODEL) -> AsyncGenerator[StreamingEvent, None]:
+async def run_single_agent_analysis(
+    prompt: str, 
+    file_name: str, 
+    max_turns: int = MAX_TURNS_SINGLE, 
+    model: str = DEFAULT_MODEL
+) -> AsyncGenerator:
     """
-    Run a complete data science analysis using a single agent with streaming.
+    Run comprehensive data science analysis using a single versatile agent.
     
-    This function:
-    1. Resets the execution environment to start clean
-    2. Creates analysis context to avoid redundant work
-    3. Runs the single agent with streaming updates
-    4. Yields real-time events for Streamlit display
+    This function implements the single-agent approach where one AI agent
+    handles the complete analysis workflow. The agent can intelligently
+    decide which CRISP-DM phases to execute based on the specific request.
+    
+    Single Agent Benefits:
+    1. Continuous context - Agent remembers everything from start to finish
+    2. Flexible workflow - Can skip irrelevant phases or adapt the approach
+    3. Simpler coordination - No need to manage handoffs between specialists
+    4. Natural conversation flow - Analysis feels like a single coherent response
+    
+    Architecture:
+    1. Single Data Science Agent - Handles all phases of analysis
+    2. Execute Code Tool - Allows agent to run Python for data manipulation
+    3. Context Management - Maintains state throughout the analysis
+    4. Analytics Tracking - Monitors performance and costs
+    5. Streaming Updates - Provides real-time progress to UI
     
     Args:
-        prompt: The analysis request/prompt
-        file_name: Name of the data file being analyzed
-        max_turns: Maximum number of turns for the agent (now optimized)
-        model: AI model to use for analysis
+        prompt: User's analysis request describing what insights they want
+        file_name: Name of the dataset file to analyze  
+        max_turns: Maximum conversation turns (higher than multi-agent since one agent does everything)
+        model: AI model to use (gpt-4o-mini, gpt-4o, etc.)
         
     Yields:
-        StreamingEvent objects for real-time UI updates
+        StreamingEvent objects for real-time UI updates during analysis
+        
+    Process Flow:
+    1. Initialize clean execution environment
+    2. Create analysis context for state management
+    3. Set up analytics tracking with model-aware costs
+    4. Create single agent with comprehensive instructions
+    5. Run agent with streaming updates and tool calls
+    6. Handle completion, errors, and cleanup
+    
+    Turn Management:
+    Single agents get a higher turn limit (500 vs 50 for specialists) because
+    they need to complete the entire analysis in one conversation. Each turn
+    includes the agent's reasoning plus any tool calls it makes.
     """
     
-    # Reset execution environment for clean start
+    # === INITIALIZATION ===
+    # Reset execution environment to start with clean slate
+    # This ensures no leftover variables from previous analyses
     reset_execution_state()
     
-    # Create analysis context to prevent redundant work (state management)
+    # Create analysis context for state management and sharing
     context = AnalysisContext(
         file_name=file_name,
         analysis_type="single_agent",
@@ -48,42 +108,38 @@ async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int 
         original_prompt=prompt
     )
     
-    # Initialize analytics tracking
-    analytics = AnalyticsTracker()
-    context.analytics = analytics  # Attach to context
-    analytics.start_agent("Data Science Agent")
+    # Initialize analytics tracking with model-specific cost calculation
+    analytics = setup_analytics(context, "Data Science Agent", model)
     
-    # Yield initial status
-    yield StreamingEvent(
-        event_type="analysis_start",
-        content="🚀 Starting single agent analysis...",
-        timestamp=context.start_time
-    )
+    # Announce analysis start to UI
+    yield create_analysis_start_event("single_agent")
 
-    # Yield analytics start event
-    yield StreamingEvent(
+    # Analytics start notification (for UI metrics display)
+    yield create_event(
         event_type="analytics_start",
         content="📊 Analytics tracking started",
-        timestamp=time.time(),
         agent_name="System"
     )
     
     try:
-        # Use SDK's built-in tracing for proper monitoring
+        # Use OpenAI SDK's built-in tracing for monitoring and debugging
         with trace("Single Agent Data Science Analysis"):
-            # Create agent with selected model
+            
+            # === AGENT CREATION ===
+            # Create the single comprehensive agent with full CRISP-DM capabilities
             data_science_agent = Agent(
                 name="Data Science Agent",
                 model=model,
                 model_settings=ModelSettings(
-                    temperature=DEFAULT_TEMPERATURE,
-                    top_p=DEFAULT_TOP_P
+                    temperature=DEFAULT_TEMPERATURE,  # Balanced creativity vs consistency
+                    top_p=DEFAULT_TOP_P               # Token sampling strategy
                 ),
-                instructions=SINGLE_AGENT_ENHANCED,
-                tools=[execute_code]
+                instructions=SINGLE_AGENT_ENHANCED,   # Comprehensive prompt with all phases
+                tools=[execute_code]                  # Python execution capability
             )
 
-            # Run agent with streaming using the SDK's native runner
+            # === ANALYSIS EXECUTION ===
+            # Run agent with streaming to provide real-time updates
             result = Runner.run_streamed(
                 data_science_agent,
                 input=prompt,
@@ -91,100 +147,109 @@ async def run_single_agent_analysis(prompt: str, file_name: str, max_turns: int 
                 max_turns=max_turns
             )
             
-            # Stream events to Streamlit in real-time
+            # === STREAMING EVENT PROCESSING ===
+            # Process events from the agent and convert to UI updates
+            event_counter = 0
             async for event in result.stream_events():
-                if getattr(st.session_state, 'cancel_analysis', False): # checks if user has clicked cancel button
-                    result.cancel()
-                    yield StreamingEvent(
-                        event_type="analysis_cancelled",
-                        content="🛑 Analysis cancelled by user",
-                        timestamp=time.time()
-                    )
-                    return
-                current_time = time.time()
                 
-                # Handle different event types for live updates
+                # Check for user cancellation (stop button clicked)
+                if getattr(st.session_state, 'cancel_analysis', False):
+                    result.cancel()
+                    yield create_cancellation_event()
+                    return
+                
+                current_time = time.time()
+                event_counter += 1
+                
+                # === PERIODIC ANALYTICS UPDATES ===
+                # Share analytics with streamlit every 10 events for live display
+                if event_counter % 10 == 0 and analytics:
+                    from data_science_agents.core.events import create_analytics_update_event
+                    yield create_analytics_update_event(analytics)
+                
+                # Handle different types of events from the agent
                 if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
+                    # Token-by-token text streaming (like ChatGPT)
+                    # Track tokens for cost estimation
                     analytics.estimate_tokens_from_content(event.data.delta)
-                    # Token-by-token text streaming - like ChatGPT
-                    yield StreamingEvent(
+                    
+                    # Stream to UI for real-time typing effect
+                    yield create_event(
                         event_type="text_delta",
                         content=event.data.delta,
-                        timestamp=current_time
+                        agent_name="Data Science Agent"
                     )
                     
                 elif event.type == "run_item_stream_event":
                     if event.item.type == "tool_call_item":
-                        # Track tool call in analytics
+                        # Agent is about to execute code or use a tool
                         analytics.add_tool_call("Data Science Agent")
                         
-                        # Tool being called - show user what's happening with more detail
-                        yield StreamingEvent(
-                            event_type="tool_call",
-                            content="🔧 Agent is executing code to analyze data...",
-                            timestamp=current_time
+                        # Inform user that agent is taking action
+                        yield create_tool_call_event(
+                            "Agent is executing code to analyze data",
+                            "Data Science Agent"
                         )
                         
                     elif event.item.type == "tool_call_output_item":
-                        # Tool execution completed - show results with more context
+                        # Tool execution completed, show preview of results
                         output_text = str(event.item.output)
-                        # Show first 300 chars for context
+                        
+                        # Show preview of output (first 300 chars for context)
                         preview = output_text[:300] + "..." if len(output_text) > 300 else output_text
-                        yield StreamingEvent(
-                            event_type="tool_output",
-                            content=f"📊 Code execution completed:\n{preview}",
-                            timestamp=current_time
+                        
+                        yield create_tool_output_event(
+                            f"Code execution completed:\n{preview}",
+                            "Data Science Agent"
                         )
                         
                     elif event.item.type == "message_output_item":
-                        # Complete message from agent - this is the thinking/reasoning
+                        # Complete message from agent (reasoning/analysis)
                         message_text = ItemHelpers.text_message_output(event.item)
-                        yield StreamingEvent(
+                        yield create_event(
                             event_type="agent_reasoning",
                             content=f"🤔 Agent reasoning: {message_text}",
-                            timestamp=current_time
+                            agent_name="Data Science Agent"
                         )
 
+            # === COMPLETION HANDLING ===
             # Finish analytics tracking
             analytics.finish_agent("Data Science Agent")
             analytics.finish()
 
-            # Get images for analytics
+            # Get created images for final summary
             images = get_created_images()
-            for img in images:
-                analytics.add_image(img)
+            # Note: Images are tracked by execution.py, not analytics (single source of truth)
 
-            # Yield analytics summary
-            analytics_summary = analytics.get_summary()
-            yield StreamingEvent(
+            # Create analytics summary for display
+            analytics_summary = create_analytics_summary_event(analytics)
+            yield create_event(
                 event_type="analytics_complete",
-                content=f"📊 Analytics: {analytics_summary['total_duration']:.1f}s, {analytics_summary['tool_calls']} tools, ${analytics_summary['estimated_cost']:.4f}",
-                timestamp=time.time(),
+                content=analytics_summary,
                 agent_name="System"
             )
 
-            # Final completion event with clean results
+            # Calculate total duration and create completion event
             total_duration = time.time() - context.start_time
-
-            # Don't include the streaming content in final output - show clean final result
-            yield StreamingEvent(
-                event_type="analysis_complete",
-                content=result.final_output,  # Just the clean final output
-                timestamp=time.time()
+            
+            yield create_analysis_complete_event(
+                final_output=result.final_output,
+                duration=total_duration,
+                image_count=len(images)
             )
             
     except Exception as e:
-        # Finish analytics even on error
+        # === ERROR HANDLING ===
+        # Ensure analytics cleanup even on error
         analytics.finish_agent("Data Science Agent")
         analytics.finish()
         
-        # Simple error handling - yield error event
-        yield StreamingEvent(
-            event_type="analysis_error",
-            content=f"❌ Analysis failed: {str(e)}",
-            timestamp=time.time()
-        )
+        # Inform user of the error with standardized format
+        yield create_error_event(f"Analysis failed: {str(e)}")
+        
     finally:
-        # Ensure analytics is always finished
+        # === CLEANUP ===
+        # Guarantee analytics is always properly finished
+        # This ensures cost tracking is accurate even if errors occur
         if analytics and not analytics.end_time:
             analytics.finish()

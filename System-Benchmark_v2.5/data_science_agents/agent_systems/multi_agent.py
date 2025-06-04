@@ -1,41 +1,126 @@
 """
-data_science_agents/agent_systems/multi_agent.py - Simple multi-agent with clean output display
+data_science_agents/agent_systems/multi_agent.py - Simplified multi-agent system
+
+This module implements the multi-agent approach to data science analysis where
+specialized agents handle different phases of the CRISP-DM methodology:
+
+1. Business Understanding Agent - Defines objectives and success criteria
+2. Data Understanding Agent - Explores and analyzes the dataset  
+3. Data Preparation Agent - Cleans and prepares data for modeling
+4. Modeling Agent - Builds and trains machine learning models
+5. Evaluation Agent - Assesses results and provides business insights
+6. Deployment Agent - Plans implementation and monitoring strategies
+
+The orchestrator agent coordinates these specialists, calling them as needed
+based on the analysis requirements and ensuring context flows between phases.
 """
+
 import time
 import streamlit as st
 import asyncio
 from typing import AsyncGenerator, Optional
-from dataclasses import dataclass
 from openai.types.responses import ResponseTextDeltaEvent
 
-from agents import Agent, Runner, ModelSettings, trace, ItemHelpers, function_tool, RunContextWrapper
+from agents import Agent, Runner, ModelSettings, trace, function_tool, RunContextWrapper
+
+# Core system imports
 from data_science_agents.core.execution import execute_code, reset_execution_state, get_created_images
-from data_science_agents.core.context import AnalysisContext 
-from data_science_agents.config.settings import DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS, MAX_TURNS_SPECIALIST
-from data_science_agents.core.events import StreamingEvent
-from data_science_agents.core.analytics import AnalyticsTracker
+from data_science_agents.core.context import AnalysisContext
+from data_science_agents.core.analytics import setup_analytics, analytics_context, create_analytics_summary_event
+from data_science_agents.core.events import (
+    create_analysis_start_event, create_analysis_complete_event, 
+    create_error_event, create_cancellation_event, create_event
+)
+
+# Configuration imports
+from data_science_agents.config.settings import (
+    DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS, MAX_TURNS_SPECIALIST
+)
 from data_science_agents.config.prompts import (
-    BUSINESS_UNDERSTANDING_ENHANCED,
-    DATA_UNDERSTANDING_ENHANCED,
-    DATA_PREPARATION_ENHANCED,
-    MODELING_ENHANCED,
-    EVALUATION_ENHANCED,
-    DEPLOYMENT_ENHANCED,
-    ORCHESTRATOR_ENHANCED,
+    BUSINESS_UNDERSTANDING_ENHANCED, DATA_UNDERSTANDING_ENHANCED, 
+    DATA_PREPARATION_ENHANCED, MODELING_ENHANCED, EVALUATION_ENHANCED, 
+    DEPLOYMENT_ENHANCED, ORCHESTRATOR_ENHANCED
 )
 
 
-def create_full_context_for_specialist(user_request: str, completed_phases: dict, current_task: str, data_file: str = None, context: AnalysisContext = None) -> str:
-    """Create comprehensive context for specialist agents"""
+# =============================================================================
+# AGENT CREATION FACTORY
+# =============================================================================
+
+def create_specialist_agent(name: str, instructions: str, model: str, model_settings: ModelSettings) -> Agent:
+    """
+    Factory function for creating specialist agents with standardized configuration.
     
+    All specialist agents share the same basic setup:
+    - They can execute Python code (execute_code tool)
+    - They use the same model settings (temperature, top_p, etc.)
+    - They follow the same configuration pattern
+    
+    Args:
+        name: Human-readable agent name (e.g., "Data Understanding Agent")
+        instructions: The specialized prompt/instructions for this agent's role
+        model: AI model to use (gpt-4o-mini, gpt-4o, etc.)
+        model_settings: Temperature, top_p, and other model configuration
+        
+    Returns:
+        Agent configured and ready for specialist work
+        
+    """
+    return Agent(
+        name=name,
+        model=model,
+        model_settings=model_settings,
+        instructions=instructions,
+        tools=[execute_code],  # All specialists can execute Python code
+    )
+
+
+# =============================================================================
+# CONTEXT CREATION HELPER  
+# =============================================================================
+
+def create_full_context_for_specialist(
+    user_request: str, 
+    completed_phases: dict, 
+    current_task: str, 
+    data_file: str = None, 
+    context: AnalysisContext = None
+) -> str:
+    """
+    Create comprehensive context information for specialist agents.
+    
+    This is a critical function that ensures each specialist agent has access
+    to ALL the information a single comprehensive agent would have. It prevents
+    specialists from being "blind" to work done by previous phases.
+    
+    Context includes:
+    1. Original user request (so agents remember the goal)
+    2. Available dataframes in memory (to avoid reloading data)  
+    3. Results from all completed phases (to build upon previous work)
+    4. Current specialization focus (what this agent should focus on)
+    
+    Args:
+        user_request: The original analysis request from the user
+        completed_phases: Dict of {phase_name: results} from previous agents
+        current_task: Description of what this specialist should focus on
+        data_file: Name of the dataset file being analyzed
+        context: AnalysisContext with state information
+        
+    Returns:
+        Formatted context string that gets prepended to the specialist's prompt
+        
+    Design Note: This ensures multi-agent mode has information parity with
+    single-agent mode, just distributed across multiple specialists.
+    """
     context_parts = [
         f"ANALYSIS REQUEST: {user_request}",
         f"ORIGINAL DATASET: {data_file}" if data_file else ""
     ]
     
-    # Add available variables/dataframes information
+    # Add available dataframes information to prevent redundant data loading
     if context:
-        available_vars = context.get_available_variables()
+        from data_science_agents.core.execution import get_available_variables
+        available_vars = get_available_variables()
         if available_vars:
             dataframe_vars = [name for name, desc in available_vars.items() 
                             if 'DataFrame' in desc or 'pandas' in desc.lower()]
@@ -45,6 +130,7 @@ def create_full_context_for_specialist(user_request: str, completed_phases: dict
                     context_parts.append(f"- {var_name}: {available_vars[var_name]}")
                 context_parts.append("\nPRIORITY: Use existing dataframes in memory rather than reloading from files when possible.")
     
+    # Add results from all previous phases so agents can build upon each other
     if completed_phases:
         context_parts.append("\nPREVIOUS WORK COMPLETED:")
         for phase, result in completed_phases.items():
@@ -52,6 +138,7 @@ def create_full_context_for_specialist(user_request: str, completed_phases: dict
             context_parts.append(f"{result}")
             context_parts.append("-" * 50)
     
+    # Define this specialist's focus area
     context_parts.extend([
         f"\nYOUR CURRENT SPECIALIZATION FOCUS: {current_task}",
         "\nYou have access to all the same information a single comprehensive agent would have.",
@@ -62,291 +149,230 @@ def create_full_context_for_specialist(user_request: str, completed_phases: dict
     return "\n".join(filter(None, context_parts))
 
 
-# Native SDK specialist agent tools
+# =============================================================================
+# GENERIC SPECIALIST CALLER
+# =============================================================================
+# This eliminates the massive duplication of 6x nearly identical function_tool
+# functions. The original code had call_business_understanding_agent, 
+# call_data_understanding_agent, etc. that all followed the exact same pattern
+# with only the agent and phase name different.
+
+async def call_specialist_agent(
+    ctx: RunContextWrapper, 
+    agent: Agent, 
+    phase_name: str, 
+    task_description: str
+) -> str:
+    """
+    Generic function to call any specialist agent with standardized handling.
+    
+    This eliminates 150+ lines of duplicate code. The original system had
+    6 separate function_tool functions that all did exactly the same thing:
+    1. Create context for the specialist
+    2. Call the specialist agent
+    3. Store the results
+    4. Track analytics
+    5. Return the output
+    
+    Now all 6 specialists use this single, well-tested function.
+    
+    Args:
+        ctx: Run context wrapper containing analysis state
+        agent: The specialist agent to call
+        phase_name: Name of the CRISP-DM phase (for result tracking)
+        task_description: What this specialist should focus on
+        
+    Returns:
+        String output from the specialist agent
+        
+    Process Flow:
+    1. Create comprehensive context (includes previous work, available data, etc.)
+    2. Call the specialist agent with max turns limit
+    3. Store results in context for next phases
+    4. Track analytics (tool calls, timing)
+    5. Return results for orchestrator
+    """
+    # Create comprehensive context so specialist has full information
+    specialist_context = create_full_context_for_specialist(
+        user_request=ctx.context.original_prompt,
+        completed_phases=getattr(ctx.context, 'completed_phases', {}),
+        current_task=task_description,
+        data_file=ctx.context.file_name,
+        context=ctx.context
+    )
+    
+    # Call the specialist agent with context and turn limits
+    result = await Runner.run(
+        agent,
+        input=specialist_context,
+        max_turns=MAX_TURNS_SPECIALIST,
+        context=ctx.context
+    )
+    
+    # Store results for future phases (ensure completed_phases exists)
+    if not hasattr(ctx.context, 'completed_phases'):
+        ctx.context.completed_phases = {}
+    ctx.context.completed_phases[phase_name] = str(result.final_output)
+    
+    # Track analytics for monitoring
+    if hasattr(ctx.context, 'analytics'):
+        ctx.context.analytics.add_tool_call(f"{phase_name} Agent")
+    
+    return str(result.final_output)
+
+
+# =============================================================================
+# FUNCTION TOOLS FOR EACH SPECIALIST
+# =============================================================================
+# These are now greatly simplified using the generic specialist caller.
+# Each function is now just 3-4 lines instead of 15-20 lines.
+
+# Global variables to store agents (used by function tools)
+# These are set during agent creation in run_multi_agent_analysis
+_business_understanding_agent = None
+_data_understanding_agent = None  
+_data_preparation_agent = None
+_modeling_agent = None
+_evaluation_agent = None
+_deployment_agent = None
+
 @function_tool
 async def call_business_understanding_agent(ctx: RunContextWrapper, task_description: str) -> str:
-    """Call business understanding specialist"""
-    
-    specialist_context = create_full_context_for_specialist(
-        user_request=ctx.context.original_prompt,
-        completed_phases=getattr(ctx.context, 'completed_phases', {}),
-        current_task=task_description,
-        data_file=ctx.context.file_name,
-        context=ctx.context
+    """Call business understanding specialist agent."""
+    return await call_specialist_agent(
+        ctx, _business_understanding_agent, "Business Understanding", task_description
     )
-    
-    result = await Runner.run(
-        business_understanding_agent,
-        input=specialist_context,
-        max_turns=MAX_TURNS_SPECIALIST,
-        context=ctx.context
-    )
-    
-    # Track completion
-    if not hasattr(ctx.context, 'completed_phases'):
-        ctx.context.completed_phases = {}
-    
-    ctx.context.completed_phases["Business Understanding"] = str(result.final_output)
-    
-    # Track analytics
-    if hasattr(ctx.context, 'analytics'):
-        ctx.context.analytics.add_tool_call("Business Understanding Agent")
-    
-    return str(result.final_output)
 
-
-@function_tool
+@function_tool  
 async def call_data_understanding_agent(ctx: RunContextWrapper, task_description: str) -> str:
-    """Call data understanding specialist"""
-    
-    specialist_context = create_full_context_for_specialist(
-        user_request=ctx.context.original_prompt,
-        completed_phases=getattr(ctx.context, 'completed_phases', {}),
-        current_task=task_description,
-        data_file=ctx.context.file_name,
-        context=ctx.context
+    """Call data understanding specialist agent."""
+    return await call_specialist_agent(
+        ctx, _data_understanding_agent, "Data Understanding", task_description
     )
-    
-    result = await Runner.run(
-        data_understanding_agent,
-        input=specialist_context,
-        max_turns=MAX_TURNS_SPECIALIST,
-        context=ctx.context
-    )
-    
-    # Track completion
-    if not hasattr(ctx.context, 'completed_phases'):
-        ctx.context.completed_phases = {}
-        
-    ctx.context.completed_phases["Data Understanding"] = str(result.final_output)
-    
-    # Track analytics
-    if hasattr(ctx.context, 'analytics'):
-        ctx.context.analytics.add_tool_call("Data Understanding Agent")
-    
-    return str(result.final_output)
-
 
 @function_tool
 async def call_data_preparation_agent(ctx: RunContextWrapper, task_description: str) -> str:
-    """Call data preparation specialist"""
-    
-    specialist_context = create_full_context_for_specialist(
-        user_request=ctx.context.original_prompt,
-        completed_phases=getattr(ctx.context, 'completed_phases', {}),
-        current_task=task_description,
-        data_file=ctx.context.file_name,
-        context=ctx.context
+    """Call data preparation specialist agent."""
+    return await call_specialist_agent(
+        ctx, _data_preparation_agent, "Data Preparation", task_description
     )
-    
-    result = await Runner.run(
-        data_preparation_agent,
-        input=specialist_context,
-        max_turns=MAX_TURNS_SPECIALIST,
-        context=ctx.context
-    )
-    
-    # Track completion
-    if not hasattr(ctx.context, 'completed_phases'):
-        ctx.context.completed_phases = {}
-        
-    ctx.context.completed_phases["Data Preparation"] = str(result.final_output)
-    
-    # Track analytics
-    if hasattr(ctx.context, 'analytics'):
-        ctx.context.analytics.add_tool_call("Data Preparation Agent")
-    
-    return str(result.final_output)
-
 
 @function_tool
 async def call_modeling_agent(ctx: RunContextWrapper, task_description: str) -> str:
-    """Call modeling specialist"""
-    
-    specialist_context = create_full_context_for_specialist(
-        user_request=ctx.context.original_prompt,
-        completed_phases=getattr(ctx.context, 'completed_phases', {}),
-        current_task=task_description,
-        data_file=ctx.context.file_name,
-        context=ctx.context
+    """Call modeling specialist agent."""
+    return await call_specialist_agent(
+        ctx, _modeling_agent, "Modeling", task_description
     )
-    
-    result = await Runner.run(
-        modeling_agent,
-        input=specialist_context,
-        max_turns=MAX_TURNS_SPECIALIST,
-        context=ctx.context
-    )
-    
-    # Track completion
-    if not hasattr(ctx.context, 'completed_phases'):
-        ctx.context.completed_phases = {}
-        
-    ctx.context.completed_phases["Modeling"] = str(result.final_output)
-    
-    # Track analytics
-    if hasattr(ctx.context, 'analytics'):
-        ctx.context.analytics.add_tool_call("Modeling Agent")
-    
-    return str(result.final_output)
-
 
 @function_tool
 async def call_evaluation_agent(ctx: RunContextWrapper, task_description: str) -> str:
-    """Call evaluation specialist"""
-    
-    specialist_context = create_full_context_for_specialist(
-        user_request=ctx.context.original_prompt,
-        completed_phases=getattr(ctx.context, 'completed_phases', {}),
-        current_task=task_description,
-        data_file=ctx.context.file_name,
-        context=ctx.context
+    """Call evaluation specialist agent."""
+    return await call_specialist_agent(
+        ctx, _evaluation_agent, "Evaluation", task_description
     )
-    
-    result = await Runner.run(
-        evaluation_agent,
-        input=specialist_context,
-        max_turns=MAX_TURNS_SPECIALIST,
-        context=ctx.context
-    )
-    
-    # Track completion
-    if not hasattr(ctx.context, 'completed_phases'):
-        ctx.context.completed_phases = {}
-        
-    ctx.context.completed_phases["Evaluation"] = str(result.final_output)
-    
-    # Track analytics
-    if hasattr(ctx.context, 'analytics'):
-        ctx.context.analytics.add_tool_call("Evaluation Agent")
-    
-    return str(result.final_output)
-
 
 @function_tool
 async def call_deployment_agent(ctx: RunContextWrapper, task_description: str) -> str:
-    """Call deployment specialist"""
-    
-    specialist_context = create_full_context_for_specialist(
-        user_request=ctx.context.original_prompt,
-        completed_phases=getattr(ctx.context, 'completed_phases', {}),
-        current_task=task_description,
-        data_file=ctx.context.file_name,
-        context=ctx.context
+    """Call deployment specialist agent."""
+    return await call_specialist_agent(
+        ctx, _deployment_agent, "Deployment", task_description
     )
+
+
+# =============================================================================
+# MAIN MULTI-AGENT ANALYSIS FUNCTION
+# =============================================================================
+
+async def run_multi_agent_analysis(
+    prompt: str, 
+    file_name: str, 
+    max_turns: int = MAX_TURNS, 
+    model: str = DEFAULT_MODEL
+) -> AsyncGenerator:
+    """
+    Run comprehensive data science analysis using multiple specialized agents.
     
-    result = await Runner.run(
-        deployment_agent,
-        input=specialist_context,
-        max_turns=MAX_TURNS_SPECIALIST,
-        context=ctx.context
-    )
+    This is the main entry point for multi-agent analysis. It coordinates
+    multiple specialist agents to complete a full data science workflow
+    following the CRISP-DM methodology.
     
-    # Track completion
-    if not hasattr(ctx.context, 'completed_phases'):
-        ctx.context.completed_phases = {}
+    Architecture:
+    1. Orchestrator Agent - Manages the overall workflow and coordinates specialists
+    2. Specialist Agents - Handle specific phases (Data Understanding, Modeling, etc.)
+    3. Context Sharing - Ensures all agents have access to previous work
+    4. Analytics Tracking - Monitors performance and costs across all agents
+    5. Streaming Updates - Provides real-time progress to the UI
+    
+    Args:
+        prompt: User's analysis request and requirements
+        file_name: Dataset file to analyze
+        max_turns: Maximum conversation turns for orchestrator (specialists have separate limits)
+        model: AI model to use for all agents
         
-    ctx.context.completed_phases["Deployment"] = str(result.final_output)
-    
-    # Track analytics
-    if hasattr(ctx.context, 'analytics'):
-        ctx.context.analytics.add_tool_call("Deployment Agent")
-    
-    return str(result.final_output)
-
-
-async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int = MAX_TURNS, model: str = DEFAULT_MODEL) -> AsyncGenerator[StreamingEvent, None]:
-    """
-    Run multi-agent analysis with simple, clean output display.
-    
-    Focus: Show specialist work clearly, then final summary.
+    Yields:
+        StreamingEvent objects for real-time UI updates during analysis
+        
+    Process Flow:
+    1. Initialize environment and context
+    2. Set up analytics tracking  
+    3. Create all specialist agents using factory
+    4. Create orchestrator agent with access to all specialists
+    5. Run orchestrator with streaming updates
+    6. Handle completion, errors, and cleanup
     """
     
-    # Reset execution environment
+    # === INITIALIZATION ===
+    # Reset execution environment for clean start
     reset_execution_state()
     
-    # Create analysis context
+    # Create analysis context to track state across agents
     context = AnalysisContext(
         file_name=file_name,
-        analysis_type="multi_agent",
+        analysis_type="multi_agent", 
         start_time=time.time(),
         original_prompt=prompt
     )
     
-    # Initialize analytics tracking
-    analytics = AnalyticsTracker()
-    context.analytics = analytics
+    # Initialize analytics with model-aware cost tracking
+    analytics = setup_analytics(context, "Orchestrator", model)
     context.completed_phases = {}
-    analytics.start_agent("Orchestrator")
     
-    # Yield initial status
-    yield StreamingEvent(
-        event_type="analysis_start",
-        content="🚀 Starting multi-agent analysis...",
-        timestamp=context.start_time
-    )
+    # Announce start of analysis
+    yield create_analysis_start_event("multi_agent")
     
     try:
         with trace("Multi-Agent Data Science Analysis"):
-            # Create model settings
+            # === AGENT CREATION ===
+            # Create model settings for all agents
             model_settings = ModelSettings(
                 temperature=DEFAULT_TEMPERATURE,
                 top_p=DEFAULT_TOP_P
             )
 
-            # Create specialized agents - globals for tool functions to use
-            global business_understanding_agent, data_understanding_agent, data_preparation_agent
-            global modeling_agent, evaluation_agent, deployment_agent
+            # Create all specialist agents using factory (eliminates duplication)
+            global _business_understanding_agent, _data_understanding_agent
+            global _data_preparation_agent, _modeling_agent, _evaluation_agent, _deployment_agent
             
-            business_understanding_agent = Agent(
-                name="Business Understanding Agent",
-                model=model,
-                model_settings=model_settings,
-                instructions=BUSINESS_UNDERSTANDING_ENHANCED,
-                tools=[execute_code],
+            _business_understanding_agent = create_specialist_agent(
+                "Business Understanding Agent", BUSINESS_UNDERSTANDING_ENHANCED, model, model_settings
+            )
+            _data_understanding_agent = create_specialist_agent(
+                "Data Understanding Agent", DATA_UNDERSTANDING_ENHANCED, model, model_settings
+            )
+            _data_preparation_agent = create_specialist_agent(
+                "Data Preparation Agent", DATA_PREPARATION_ENHANCED, model, model_settings
+            )
+            _modeling_agent = create_specialist_agent(
+                "Modeling Agent", MODELING_ENHANCED, model, model_settings
+            )
+            _evaluation_agent = create_specialist_agent(
+                "Evaluation Agent", EVALUATION_ENHANCED, model, model_settings
+            )
+            _deployment_agent = create_specialist_agent(
+                "Deployment Agent", DEPLOYMENT_ENHANCED, model, model_settings
             )
 
-            data_understanding_agent = Agent(
-                name="Data Understanding Agent", 
-                model=model,
-                model_settings=model_settings,
-                instructions=DATA_UNDERSTANDING_ENHANCED,
-                tools=[execute_code],
-            )
-
-            data_preparation_agent = Agent(
-                name="Data Preparation Agent",
-                model=model,
-                model_settings=model_settings,
-                instructions=DATA_PREPARATION_ENHANCED,
-                tools=[execute_code],
-            )
-
-            modeling_agent = Agent(
-                name="Modeling Agent",
-                model=model,
-                model_settings=model_settings,
-                instructions=MODELING_ENHANCED,
-                tools=[execute_code],
-            )
-
-            evaluation_agent = Agent(
-                name="Evaluation Agent",
-                model=model,
-                model_settings=model_settings,
-                instructions=EVALUATION_ENHANCED,
-                tools=[execute_code],
-            )
-
-            deployment_agent = Agent(
-                name="Deployment Agent",
-                model=model,
-                model_settings=model_settings,
-                instructions=DEPLOYMENT_ENHANCED,
-                tools=[execute_code],
-            )
-
-            # Create orchestrator agent
+            # Create orchestrator agent with access to all specialists
             orchestration_agent = Agent(
                 name="Data Science Orchestration Agent",
                 model=model,
@@ -362,7 +388,8 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
                 ]
             )
 
-            # Run orchestrator with simple streaming
+            # === ANALYSIS EXECUTION ===
+            # Run orchestrator with streaming updates
             result = Runner.run_streamed(
                 orchestration_agent,
                 input=prompt,
@@ -370,94 +397,98 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
                 max_turns=max_turns
             )
             
-            # Simple streaming - just orchestrator thinking and tool calls
+            # Stream events to UI with simplified processing
+            event_counter = 0
             async for event in result.stream_events():
-                # Check for cancellation
+                # Check for user cancellation
                 if getattr(st.session_state, 'cancel_analysis', False):
                     result.cancel()
-                    yield StreamingEvent(
-                        event_type="analysis_cancelled",
-                        content="🛑 Analysis cancelled by user",
-                        timestamp=time.time(),
-                        agent_name="Orchestrator"
-                    )
+                    yield create_cancellation_event()
                     return
                 
                 current_time = time.time()
+                event_counter += 1
                 
-                # Stream only key events
+                # === PERIODIC ANALYTICS UPDATES ===
+                # Share analytics with streamlit every 10 events for live display
+                if event_counter % 10 == 0 and analytics:
+                    from data_science_agents.core.events import create_analytics_update_event
+                    yield create_analytics_update_event(analytics)
+                
+                # Handle different event types for UI updates
                 if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
-                    # Estimate tokens for cost tracking
+                    # Token-by-token streaming (like ChatGPT)
                     analytics.estimate_tokens_from_content(event.data.delta)
                     
-                    yield StreamingEvent(
+                    yield create_event(
                         event_type="text_delta",
                         content=event.data.delta,
-                        timestamp=current_time,
                         agent_name="Orchestrator"
                     )
                     
                 elif event.type == "run_item_stream_event":
                     if event.item.type == "tool_call_item":
-                        # Track tool calls
+                        # Track tool usage
                         analytics.add_tool_call("Orchestrator")
                         
-                        # Get tool name
+                        # Determine which specialist is being called
                         tool_name = 'unknown_tool'
                         if hasattr(event.item, 'raw_item') and hasattr(event.item.raw_item, 'function'):
                             tool_name = getattr(event.item.raw_item.function, 'name', 'unknown_tool')
                         
                         if 'agent' in tool_name:
                             agent_display_name = tool_name.replace('call_', '').replace('_agent', '').replace('_', ' ').title()
-                            yield StreamingEvent(
+                            yield create_event(
                                 event_type="tool_call",
                                 content=f"🤖 Starting {agent_display_name} Agent...",
-                                timestamp=current_time,
                                 agent_name="Orchestrator"
                             )
                     
                     elif event.item.type == "tool_call_output_item":
-                        # Get the tool output content
+                        # Show brief summary of specialist work
                         output_content = getattr(event.item, 'output', '')
                         
                         if output_content and len(output_content) > 50:
-                            # Show brief summary
                             summary = output_content[:80] + "..." if len(output_content) > 80 else output_content
-                            yield StreamingEvent(
+                            yield create_event(
                                 event_type="tool_output",
                                 content=f"✅ Completed: {summary}",
-                                timestamp=current_time,
                                 agent_name="Orchestrator"
                             )
 
-            # Finish analytics
+            # === COMPLETION HANDLING ===
+            # Finish analytics tracking
             analytics.finish_agent("Orchestrator")
             analytics.finish()
 
-            # Get images for analytics
+            # Get final results and images
             images = get_created_images()
             for img in images:
-                analytics.add_image(img)
-
-            # Show final summary
-            total_duration = time.time() - context.start_time
+                # Note: We don't track images in analytics anymore - execution.py is single source
+                pass
             
-            yield StreamingEvent(
+            total_duration = time.time() - context.start_time
+
+            # Show final comprehensive results
+            final_content = f"✅ Multi-agent analysis completed in {total_duration:.1f}s!\n\n📊 **Final Results:**\n{result.final_output}"
+            if len(images) > 0:
+                final_content += f"\n\n📸 Created {len(images)} visualizations"
+                
+            yield create_event(
                 event_type="analysis_complete",
-                content=f"✅ Multi-agent analysis completed in {total_duration:.1f}s!\n\n📊 **Final Results:**\n{result.final_output}\n\n📸 Created {len(images)} visualizations",
-                timestamp=time.time(),
+                content=final_content,
                 agent_name="Orchestrator"
             )
             
-            # Now show specialist agent work clearly
+            # Show detailed specialist work if available
             if hasattr(context, 'completed_phases') and context.completed_phases:
-                yield StreamingEvent(
+                yield create_event(
                     event_type="text_delta",
                     content="\n\n---\n\n## 🔍 **Specialist Agent Work:**\n\n",
-                    timestamp=time.time(),
                     agent_name="System"
                 )
                 
+                # Icons for each specialist type
                 agent_display = {
                     "Business Understanding": "🎯 Business Understanding Agent",
                     "Data Understanding": "📊 Data Understanding Agent", 
@@ -467,38 +498,33 @@ async def run_multi_agent_analysis(prompt: str, file_name: str, max_turns: int =
                     "Deployment": "🚀 Deployment Agent"
                 }
                 
+                # Display work from each completed phase
                 for phase_name, phase_output in context.completed_phases.items():
                     if phase_output and phase_output.strip():
                         display_name = agent_display.get(phase_name, f"🔹 {phase_name}")
                         
-                        yield StreamingEvent(
+                        yield create_event(
                             event_type="text_delta",
                             content=f"\n### {display_name}:\n{phase_output.strip()}\n\n",
-                            timestamp=time.time(),
                             agent_name=phase_name
                         )
             
-            # Analytics summary
-            analytics_summary = analytics.get_summary()
-            yield StreamingEvent(
+            # Final analytics summary
+            analytics_summary = create_analytics_summary_event(analytics)
+            yield create_event(
                 event_type="analytics_complete",
-                content=f"\n---\n\n📊 **Analytics:** {analytics_summary['total_duration']:.1f}s, {analytics_summary['tool_calls']} tools, {analytics_summary['phases_completed']} phases, ${analytics_summary['estimated_cost']:.4f}",
-                timestamp=time.time(),
+                content=f"\n---\n\n{analytics_summary}",
                 agent_name="System"
             )
             
     except Exception as e:
-        # Finish analytics even on error
+        # Ensure analytics cleanup on error  
         analytics.finish_agent("Orchestrator")
         analytics.finish()
         
-        yield StreamingEvent(
-            event_type="analysis_error",
-            content=f"❌ Multi-agent analysis failed: {str(e)}",
-            timestamp=time.time(),
-            agent_name="Orchestrator"
-        )
+        yield create_error_event(f"Multi-agent analysis failed: {str(e)}")
+        
     finally:
-        # Ensure analytics is always finished
+        # Guarantee analytics is always finished
         if analytics and not analytics.end_time:
             analytics.finish()
