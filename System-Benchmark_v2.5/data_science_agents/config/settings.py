@@ -1,34 +1,154 @@
 """
-data_science_agents/config/settings.py - Simple configuration settings with optimized limits
+data_science_agents/config/settings.py - System Configuration and Pricing
+
+This module centralizes all configuration settings for the data science agent system.
+It provides a single place to manage model settings, analysis limits, file handling,
+and cost calculations. Think of it as the "control panel" for the entire system.
+
+Key Configuration Areas:
+- AI Model Settings: Default models, temperature, and other parameters
+- Analysis Limits: Turn budgets and execution constraints  
+- File Handling: Supported formats and directory settings
+- Cost Tracking: Current pricing for different AI models
+- Environment Integration: Reading settings from environment variables
+
+Purpose: This centralized configuration approach ensures:
+- Consistent settings across the entire system
+- Easy adjustment of system parameters
+- Transparent cost calculation based on real pricing
+- Environment-specific customization via environment variables
+- Clear separation of configuration from business logic
+
+The settings support both development and production environments, with
+sensible defaults that can be overridden via environment variables.
 """
 import os
 
-# Model configuration - using environment variables with sensible defaults
+# =============================================================================
+# AI MODEL CONFIGURATION
+# =============================================================================
+# These settings control which AI models are used and how they behave during analysis
+
+# Default AI model used when no specific model is requested
+# gpt-4o-mini provides the best balance of capability and cost for most data analysis tasks
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-4o-mini")
+
+# Model creativity and consistency settings
+# Temperature controls randomness: 0.0 = very consistent, 1.0 = very creative
+# 0.5 provides a good balance for data analysis (consistent but not rigid)
 DEFAULT_TEMPERATURE = float(os.getenv("DEFAULT_TEMPERATURE", "0.5"))
+
+# Top-p controls diversity of token selection during generation
+# 0.5 focuses on the most likely tokens while allowing some variation
 DEFAULT_TOP_P = float(os.getenv("DEFAULT_TOP_P", "0.5"))
 
-# Analysis limits - balanced for comprehensive tasks and comparability
-MAX_TURNS = int(os.getenv("MAX_TURNS", "10"))  # Orchestrator turns
-MAX_TURNS_SINGLE = int(os.getenv("MAX_TURNS_SINGLE", "500"))  # Single agent total
-MAX_TURNS_SPECIALIST = int(os.getenv("MAX_TURNS_SPECIALIST", "50"))  # Specialist agents
 
-# File handling
+# =============================================================================
+# ANALYSIS EXECUTION LIMITS
+# =============================================================================
+# These settings control how much work agents can do, preventing runaway costs and timeouts
+
+# Maximum conversation turns for the orchestrator agent in multi-agent mode
+# Each turn includes reasoning + tool calls, so 10 turns allows substantial coordination
+MAX_TURNS = int(os.getenv("MAX_TURNS", "10"))
+
+# Maximum conversation turns for single agent analysis
+# Single agents need more turns since they handle all phases themselves
+# 500 turns allows comprehensive analysis while preventing infinite loops
+MAX_TURNS_SINGLE = int(os.getenv("MAX_TURNS_SINGLE", "500"))
+
+# Maximum conversation turns for specialist agents in multi-agent mode
+# Specialists focus on specific phases, so 50 turns is sufficient for most tasks
+MAX_TURNS_SPECIALIST = int(os.getenv("MAX_TURNS_SPECIALIST", "50"))
+
+
+# =============================================================================
+# FILE HANDLING CONFIGURATION
+# =============================================================================
+# Settings for data file processing and output management
+
+# File types that the system can process for analysis
+# Currently supports the most common data formats in business and research
 SUPPORTED_FILE_TYPES = ["csv", "xlsx", "xls"]
+
+# Directory where agent-created images (plots, charts) are saved
+# This provides a consistent location for all visualizations
 IMAGES_DIR = "Images"
 
-# Current token costs per 1M tokens (updated January 2025)
+
+# =============================================================================
+# AI MODEL PRICING (CURRENT AS OF JANUARY 2025)
+# =============================================================================
+# Cost per 1 million tokens for different OpenAI models
+# These prices are used for real-time cost estimation during analysis
+
 TOKEN_COSTS = {
-    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-    "gpt-4o": {"input": 3.00, "output": 10.00}, 
-    "gpt-4": {"input": 30.00, "output": 60.00},
-    "gpt-3.5-turbo": {"input": 0.50, "output": 1.50}
+    # GPT-4o Mini: Most cost-effective option, excellent for most data analysis
+    "gpt-4o-mini": {
+        "input": 0.15,   # Cost per 1M input tokens (prompts, context)
+        "output": 0.60   # Cost per 1M output tokens (agent responses)
+    },
+    
+    # GPT-4o: Latest and most capable model, best for complex analysis
+    "gpt-4o": {
+        "input": 3.00,   # Higher cost but superior reasoning capabilities
+        "output": 10.00  # Premium pricing for state-of-the-art performance
+    },
+    
+    # GPT-4: Previous generation, still very capable for data science
+    "gpt-4": {
+        "input": 30.00,  # Legacy pricing, generally superseded by gpt-4o
+        "output": 60.00  # Most expensive option, rarely recommended
+    },
+    
+    # GPT-3.5 Turbo: Fastest and most economical for simple tasks
+    "gpt-3.5-turbo": {
+        "input": 0.50,   # Very economical for straightforward analysis
+        "output": 1.50   # Good value for basic data processing tasks
+    }
 }
 
+
 def get_model_cost(model_name: str, input_tokens: int = 0, output_tokens: int = 0) -> float:
-    """Calculate cost for model usage"""
-    if model_name not in TOKEN_COSTS:
-        model_name = "gpt-4o-mini"  # fallback
+    """
+    Calculate the total cost for using a specific AI model based on token usage.
     
+    This function provides accurate, real-time cost estimation by applying the
+    current pricing structure to actual token consumption. Different models have
+    very different costs, and input/output tokens are priced differently.
+    
+    Args:
+        model_name (str): Name of the AI model being used (e.g., "gpt-4o-mini")
+        input_tokens (int): Number of input tokens consumed (prompts, context, data)
+        output_tokens (int): Number of output tokens generated (agent responses, analysis)
+        
+    Returns:
+        float: Total cost in USD for the specified token usage
+        
+    Cost Calculation:
+        - Input and output tokens are priced separately (output typically costs more)
+        - Costs are calculated per million tokens, then scaled to actual usage
+        - Unknown models default to gpt-4o-mini pricing (most economical fallback)
+        
+    Example Usage:
+        # Calculate cost for a typical analysis session
+        cost = get_model_cost("gpt-4o-mini", input_tokens=50000, output_tokens=25000)
+        # Returns: (50000 * 0.15 + 25000 * 0.60) / 1,000,000 = $0.0225
+        
+    Purpose:
+        - Provide transparent cost tracking during analysis
+        - Enable users to make informed model choices
+        - Support budget monitoring and cost optimization
+        - Help users understand the value of different models
+    """
+    # Use fallback pricing if model is not recognized
+    if model_name not in TOKEN_COSTS:
+        model_name = "gpt-4o-mini"  # Default to most economical option
+    
+    # Get pricing structure for the specified model
     costs = TOKEN_COSTS[model_name]
-    return (input_tokens * costs["input"] + output_tokens * costs["output"]) / 1_000_000
+    
+    # Calculate total cost: (input_tokens * input_rate + output_tokens * output_rate) / 1M
+    total_cost = (input_tokens * costs["input"] + output_tokens * costs["output"]) / 1_000_000
+    
+    return total_cost

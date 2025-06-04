@@ -1,27 +1,29 @@
 """
-data_science_agents/agent_systems/single_agent.py - Simplified single agent system
+data_science_agents/agent_systems/single_agent.py - Single Agent Analysis System
 
-This module implements the single-agent approach to data science analysis where
-one comprehensive agent handles all phases of the CRISP-DM methodology within
-a single conversation flow.
+This module implements a single-agent approach to data science analysis where
+one comprehensive AI agent handles all phases of the CRISP-DM methodology:
 
-SIMPLIFICATIONS MADE:
-- Analytics helpers eliminate duplicate setup/teardown code
-- Event helpers eliminate duplicate StreamingEvent creation  
-- Centralized error handling with consistent patterns
-- Standardized imports and configuration
+- Business Understanding: Define objectives and success criteria
+- Data Understanding: Explore and analyze the dataset structure
+- Data Preparation: Clean and prepare data for analysis
+- Modeling: Build and evaluate machine learning models
+- Evaluation: Assess results and provide business insights
+- Deployment: Provide implementation guidance
 
 The single agent approach offers:
-1. Simpler orchestration (no inter-agent coordination needed)
-2. Better context retention (one continuous conversation)
-3. More flexible phase selection (can skip irrelevant phases)
-4. Faster execution (no handoff overhead)
+- Simpler orchestration with no inter-agent coordination needed
+- Better context retention throughout the analysis
+- Flexible phase selection based on the specific request
+- Faster execution with no handoff overhead
 
-Trade-offs:
-- Less specialized expertise per phase
-- Potential for longer individual responses
-- Single point of failure (if agent gets stuck)
+Key Features:
+- Comprehensive CRISP-DM methodology implementation
+- Real-time streaming of analysis progress
+- Flexible phase execution based on task requirements
+- Advanced analytics tracking for performance monitoring
 """
+
 import time
 import streamlit as st
 from typing import AsyncGenerator
@@ -29,7 +31,7 @@ from openai.types.responses import ResponseTextDeltaEvent
 
 from agents import Agent, Runner, ModelSettings, trace, ItemHelpers
 
-# Core system imports
+# Import core system components
 from data_science_agents.core.execution import execute_code, reset_execution_state, get_created_images
 from data_science_agents.core.context import AnalysisContext
 from data_science_agents.core.analytics import setup_analytics, create_analytics_summary_event
@@ -39,7 +41,7 @@ from data_science_agents.core.events import (
     create_tool_call_event, create_tool_output_event
 )
 
-# Configuration imports
+# Import configuration settings
 from data_science_agents.config.prompts import SINGLE_AGENT_ENHANCED
 from data_science_agents.config.settings import (
     DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS_SINGLE
@@ -53,54 +55,44 @@ async def run_single_agent_analysis(
     model: str = DEFAULT_MODEL
 ) -> AsyncGenerator:
     """
-    Run comprehensive data science analysis using a single versatile agent.
+    Execute comprehensive data science analysis using a single AI agent.
     
-    This function implements the single-agent approach where one AI agent
-    handles the complete analysis workflow. The agent can intelligently
-    decide which CRISP-DM phases to execute based on the specific request.
+    This function orchestrates a complete data science workflow using one
+    versatile agent that can handle all phases of the CRISP-DM methodology.
+    The agent intelligently determines which phases are needed based on the
+    user's specific request and executes them in a logical sequence.
     
-    Single Agent Benefits:
-    1. Continuous context - Agent remembers everything from start to finish
-    2. Flexible workflow - Can skip irrelevant phases or adapt the approach
-    3. Simpler coordination - No need to manage handoffs between specialists
-    4. Natural conversation flow - Analysis feels like a single coherent response
-    
-    Architecture:
-    1. Single Data Science Agent - Handles all phases of analysis
-    2. Execute Code Tool - Allows agent to run Python for data manipulation
-    3. Context Management - Maintains state throughout the analysis
-    4. Analytics Tracking - Monitors performance and costs
-    5. Streaming Updates - Provides real-time progress to UI
+    Architecture Components:
+    1. Single Data Science Agent: Handles all analysis phases autonomously
+    2. Execute Code Tool: Enables Python execution for data manipulation
+    3. Context Management: Maintains analysis state throughout execution
+    4. Analytics Tracking: Monitors performance metrics and costs
+    5. Streaming Updates: Provides real-time progress to the user interface
     
     Args:
-        prompt: User's analysis request describing what insights they want
-        file_name: Name of the dataset file to analyze  
-        max_turns: Maximum conversation turns (higher than multi-agent since one agent does everything)
-        model: AI model to use (gpt-4o-mini, gpt-4o, etc.)
+        prompt (str): User's analysis request describing desired insights
+        file_name (str): Name of the dataset file to analyze
+        max_turns (int): Maximum conversation turns (default from settings)
+        model (str): AI model to use (e.g., 'gpt-4o-mini', 'gpt-4o')
         
     Yields:
-        StreamingEvent objects for real-time UI updates during analysis
+        StreamingEvent: Real-time events for UI updates during analysis
         
     Process Flow:
     1. Initialize clean execution environment
     2. Create analysis context for state management
-    3. Set up analytics tracking with model-aware costs
-    4. Create single agent with comprehensive instructions
-    5. Run agent with streaming updates and tool calls
+    3. Set up analytics tracking with model-specific costs
+    4. Create and configure the data science agent
+    5. Execute analysis with real-time streaming
     6. Handle completion, errors, and cleanup
-    
-    Turn Management:
-    Single agents get a higher turn limit (500 vs 50 for specialists) because
-    they need to complete the entire analysis in one conversation. Each turn
-    includes the agent's reasoning plus any tool calls it makes.
     """
     
-    # === INITIALIZATION ===
-    # Reset execution environment to start with clean slate
-    # This ensures no leftover variables from previous analyses
+    # === ENVIRONMENT INITIALIZATION ===
+    # Reset the execution environment to ensure clean start
+    # This clears any variables from previous analyses
     reset_execution_state()
     
-    # Create analysis context for state management and sharing
+    # Create analysis context to track state throughout the process
     context = AnalysisContext(
         file_name=file_name,
         analysis_type="single_agent",
@@ -111,10 +103,10 @@ async def run_single_agent_analysis(
     # Initialize analytics tracking with model-specific cost calculation
     analytics = setup_analytics(context, "Data Science Agent", model)
     
-    # Announce analysis start to UI
+    # Notify the user interface that analysis is starting
     yield create_analysis_start_event("single_agent")
 
-    # Analytics start notification (for UI metrics display)
+    # Send analytics initialization event for UI metrics display
     yield create_event(
         event_type="analytics_start",
         content="📊 Analytics tracking started",
@@ -126,7 +118,7 @@ async def run_single_agent_analysis(
         with trace("Single Agent Data Science Analysis"):
             
             # === AGENT CREATION ===
-            # Create the single comprehensive agent with full CRISP-DM capabilities
+            # Create the comprehensive data science agent
             data_science_agent = Agent(
                 name="Data Science Agent",
                 model=model,
@@ -134,12 +126,12 @@ async def run_single_agent_analysis(
                     temperature=DEFAULT_TEMPERATURE,  # Balanced creativity vs consistency
                     top_p=DEFAULT_TOP_P               # Token sampling strategy
                 ),
-                instructions=SINGLE_AGENT_ENHANCED,   # Comprehensive prompt with all phases
+                instructions=SINGLE_AGENT_ENHANCED,   # Comprehensive analysis prompts
                 tools=[execute_code]                  # Python execution capability
             )
 
             # === ANALYSIS EXECUTION ===
-            # Run agent with streaming to provide real-time updates
+            # Run the agent with streaming to provide real-time updates
             result = Runner.run_streamed(
                 data_science_agent,
                 input=prompt,
@@ -169,11 +161,11 @@ async def run_single_agent_analysis(
                 
                 # Handle different types of events from the agent
                 if event.type == "raw_response_event" and isinstance(event.data, ResponseTextDeltaEvent):
-                    # Token-by-token text streaming (like ChatGPT)
-                    # Track tokens for cost estimation
+                    # Token-by-token text streaming (similar to ChatGPT interface)
+                    # Track tokens for accurate cost estimation
                     analytics.estimate_tokens_from_content(event.data.delta)
                     
-                    # Stream to UI for real-time typing effect
+                    # Stream text to UI for real-time typing effect
                     yield create_event(
                         event_type="text_delta",
                         content=event.data.delta,
@@ -185,7 +177,7 @@ async def run_single_agent_analysis(
                         # Agent is about to execute code or use a tool
                         analytics.add_tool_call("Data Science Agent")
                         
-                        # Inform user that agent is taking action
+                        # Notify user that agent is taking action
                         yield create_tool_call_event(
                             "Agent is executing code to analyze data",
                             "Data Science Agent"
@@ -195,7 +187,7 @@ async def run_single_agent_analysis(
                         # Tool execution completed, show preview of results
                         output_text = str(event.item.output)
                         
-                        # Show preview of output (first 300 chars for context)
+                        # Create preview of output (first 300 characters for context)
                         preview = output_text[:300] + "..." if len(output_text) > 300 else output_text
                         
                         yield create_tool_output_event(
@@ -213,13 +205,12 @@ async def run_single_agent_analysis(
                         )
 
             # === COMPLETION HANDLING ===
-            # Finish analytics tracking
+            # Finalize analytics tracking
             analytics.finish_agent("Data Science Agent")
             analytics.finish()
 
-            # Get created images for final summary
+            # Retrieve created images for final summary
             images = get_created_images()
-            # Note: Images are tracked by execution.py, not analytics (single source of truth)
 
             # Create analytics summary for display
             analytics_summary = create_analytics_summary_event(analytics)
@@ -229,9 +220,10 @@ async def run_single_agent_analysis(
                 agent_name="System"
             )
 
-            # Calculate total duration and create completion event
+            # Calculate total analysis duration
             total_duration = time.time() - context.start_time
             
+            # Send completion event with final results
             yield create_analysis_complete_event(
                 final_output=result.final_output,
                 duration=total_duration,
@@ -244,7 +236,7 @@ async def run_single_agent_analysis(
         analytics.finish_agent("Data Science Agent")
         analytics.finish()
         
-        # Inform user of the error with standardized format
+        # Inform user of the error with standardized formatting
         yield create_error_event(f"Analysis failed: {str(e)}")
         
     finally:

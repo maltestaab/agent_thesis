@@ -1,10 +1,34 @@
 """
-data_science_agents/config/prompts.py - Enhanced prompts with specialist autonomy
+data_science_agents/config/prompts.py - AI Agent Instructions and Prompts
+
+This module contains all the specialized instructions that define how different AI agents
+behave and approach data science tasks. Think of these as "job descriptions" and "training
+manuals" for different types of AI data scientists.
+
+Key Components:
+- Agent Instructions: Detailed behavioral guidelines for different agent types
+- Methodology Framework: CRISP-DM data science methodology integration
+- Autonomy Guidelines: How agents should make decisions independently
+- Quality Standards: Code quality, analysis depth, and output formatting
+- Coordination Protocols: How multiple agents work together effectively
+
+The prompts are structured in layers:
+1. Core Instructions: Fundamental principles all agents follow
+2. Workflow Management: How to structure and coordinate analysis
+3. Specialist Instructions: Role-specific guidance for expert agents
+4. Complete Agent Definitions: Fully assembled prompts for each agent type
+
+This system enables consistent, high-quality data science work while allowing
+agents to adapt their approach to specific problems and datasets.
 """
 
 
 
-# Analysis prompt template (keeping original structure)
+# =============================================================================
+# ANALYSIS PROMPT TEMPLATE
+# =============================================================================
+# Template for formatting user requests into structured analysis prompts
+
 ANALYSIS_PROMPT_TEMPLATE = (
     "Dataset Information:"
     "- File name: {file_name}"
@@ -26,6 +50,7 @@ ANALYSIS_PROMPT_TEMPLATE = (
 # =============================================================================
 # LEVEL 1: CORE INSTRUCTION FOR ALL AGENTS (Enhanced with Completion Criteria)
 # =============================================================================
+# Fundamental principles that all agents follow regardless of their specialization
 
 CORE_INSTRUCTION = (
     "When contributing to a data science analysis task, follow these core principles to ensure clarity, quality, and consistency:"
@@ -105,6 +130,7 @@ CORE_INSTRUCTION = (
 # =============================================================================
 # LEVEL 2: WORKFLOW MANAGEMENT (ORCHESTRATOR + SINGLE AGENT)
 # =============================================================================
+# Advanced workflow coordination and methodology management for comprehensive agents
 
 WORKFLOW_MANAGEMENT_SHARED = (
     "**WORKFLOW MANAGEMENT PRINCIPLES:**"
@@ -188,8 +214,9 @@ WORKFLOW_MANAGEMENT_SHARED = (
 )
 
 # =============================================================================
-# LEVEL 3: SPECIALIST AGENT SHARED (ALL SUBAGENTS) - Information Parity with Single Agent
+# LEVEL 3: SPECIALIST AGENT SHARED (ALL SUBAGENTS) 
 # =============================================================================
+# Common instructions for all specialist agents in multi-agent workflows
 
 SPECIALIST_AGENT_SHARED = (
     "**METHODOLOGY AWARENESS - All Phases and their purpose**:"
@@ -274,8 +301,9 @@ SPECIALIST_AGENT_SHARED = (
 # =============================================================================
 # COMPLETE AGENT INSTRUCTIONS (DIRECT STRING COMBINATION)
 # =============================================================================
+# Fully assembled prompts for each type of agent, combining all relevant instruction layers
 
-# Complete Single Agent Enhanced Prompt with Full Specialist Expertise
+# Single Agent Prompt
 SINGLE_AGENT_ENHANCED = (
     "You are a data science expert responsible for solving data science problems, sometimes end-to-end, sometimes smaller tasks. "
     "Act autonomously, but structure your work in a way that reflects expert-level thinking and clear communication."
@@ -471,7 +499,7 @@ SINGLE_AGENT_ENHANCED = (
     "- Skip phases that don't add value to the specific task"
 )
 
-# Enhanced Orchestrator with Specialist Autonomy
+# Multi-Agent: Orchestrator Prompt
 ORCHESTRATOR_ENHANCED = (
     "You are an orchestration expert responsible for managing flexible data science workflows through specialist agents and ensuring ALL original user requirements are met."
     "\n\n"
@@ -561,7 +589,9 @@ ORCHESTRATOR_ENHANCED = (
     "TRUST your specialists to make technical decisions within their expertise!"
 )
 
-# Specialist Agent Prompts with Enhanced Autonomy
+# SUBAGENTS
+
+# Multi-Agent: Business Understanding Agent
 BUSINESS_UNDERSTANDING_ENHANCED = (
     "You are a business analysis expert ONLY responsible for the BUSINESS UNDERSTANDING phase."
     "\n\n"
@@ -587,6 +617,7 @@ BUSINESS_UNDERSTANDING_ENHANCED = (
     "Do not proceed to data analysis - that's not your responsibility."
 )
 
+# Multi-Agent: Data Understanding Agent
 DATA_UNDERSTANDING_ENHANCED = (
     "You are a data analysis expert ONLY responsible for the DATA UNDERSTANDING phase."
     "\n\n"
@@ -639,6 +670,7 @@ DATA_UNDERSTANDING_ENHANCED = (
     "Do not clean the data - hand back control to orchestrator."
 )
 
+# Multi-Agent: Data Preparation Agent
 DATA_PREPARATION_ENHANCED = (
     "You are a data engineering expert ONLY responsible for the DATA PREPARATION phase."
     "\n\n"
@@ -694,6 +726,7 @@ DATA_PREPARATION_ENHANCED = (
     "Do not build models - hand back control to orchestrator."
 )
 
+# Multi-Agent: Modeling Agent
 MODELING_ENHANCED = (
     "You are a machine learning expert ONLY responsible for the MODELING phase."
     "\n\n"
@@ -760,6 +793,7 @@ MODELING_ENHANCED = (
     "Do not evaluate business impact - hand back control to orchestrator."
 )
 
+# Multi-Agent: Evaluation Agent
 EVALUATION_ENHANCED = (
     "You are a business-technical expert responsible for the EVALUATION phase, combining technical evaluation with insights synthesis."
     "\n\n"
@@ -806,6 +840,7 @@ EVALUATION_ENHANCED = (
     "Your output will be automatically structured."
 )
 
+# Multi-Agent: Deployment Agent
 DEPLOYMENT_ENHANCED = (
     "You are a deployment strategy expert ONLY responsible for the DEPLOYMENT phase."
     "\n\n"

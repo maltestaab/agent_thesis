@@ -1,11 +1,15 @@
 """
-streamlit_app.py - Main Web Interface with Specialist Streaming Support
+streamlit_app.py - Main Web Interface for Data Science Analysis Tool
 
-STREAMING SPECIALISTS:
-- Handles real-time events from both orchestrator and specialist agents
-- Shows specialist reasoning, code execution, and results as they happen
-- Provides complete transparency into multi-agent workflow
-- Maintains all simplifications while adding full specialist visibility
+This is the primary user interface built with Streamlit that provides:
+- File upload and data preview functionality
+- Real-time streaming analysis with live progress updates
+- Support for both single-agent and multi-agent analysis modes
+- Live analytics display (duration, tool calls, costs, images)
+- Interactive controls for starting, stopping, and configuring analysis
+
+The interface handles all user interactions and coordinates with the agent systems
+to provide a seamless data science analysis experience.
 """
 
 import streamlit as st
@@ -18,12 +22,13 @@ from dotenv import load_dotenv
 import nest_asyncio
 from collections import deque
 
-# Apply nest_asyncio to handle asyncio in Streamlit
+# Enable nested asyncio loops for Streamlit compatibility
 nest_asyncio.apply()
 
-# Load environment variables
+# Load environment variables for API keys and configuration
 load_dotenv()
 
+# Import the core analysis systems
 from data_science_agents.agent_systems.single_agent import run_single_agent_analysis
 from data_science_agents.agent_systems.multi_agent import run_multi_agent_analysis
 from data_science_agents.core.execution import get_created_images
@@ -32,71 +37,91 @@ from data_science_agents.config.prompts import ANALYSIS_PROMPT_TEMPLATE
 
 
 def display_images_gallery(images):
-    """Display created visualizations in a gallery format."""
+    """
+    Display analysis-generated visualizations in a user-friendly gallery format.
+    
+    This function takes a list of image file paths and displays them in a two-column
+    layout within the Streamlit interface. It filters for valid image files and
+    handles display errors gracefully.
+    
+    Args:
+        images (list): List of file paths to images created during analysis
+    """
     if not images:
         return
     
-    # Valid image extensions
+    # Define supported image file extensions for display
     image_extensions = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.tiff', '.webp')
     
-    # Filter for image files only
+    # Filter to only include valid image files that actually exist
     image_files = [img for img in images if img.lower().endswith(image_extensions) and os.path.exists(img)]
     
     if not image_files:
         return
     
+    # Create gallery section header
     st.subheader("📸 Generated Visualizations")
     
-    # Display images in two columns for better layout
+    # Display images in two-column layout for better presentation
     cols = st.columns(2)
     for i, img_path in enumerate(image_files):
         try:
-            with cols[i % 2]:
+            with cols[i % 2]:  # Alternate between left and right columns
                 st.image(img_path, caption=os.path.basename(img_path), use_container_width=True)
         except Exception as e:
             # Skip files that can't be displayed as images
             continue
-                
+
+
 def create_streaming_ui():
-    """Create the real-time interface containers for live analysis updates."""
+    """
+    Create the real-time streaming interface containers for live analysis updates.
     
-    # Main containers for all streaming updates
+    This function sets up the UI components that display live progress during analysis:
+    - Agent output: Shows the AI agent's reasoning and text output in real-time
+    - Tool activity: Displays when agents execute code or use tools
+    - Event log: Provides a timeline of analysis events
+    
+    Returns:
+        tuple: (agent_output, tool_activity, event_log) - Streamlit containers for live updates
+    """
+    # Create main container for all streaming content
     streaming_container = st.container()
     
     with streaming_container:
         st.subheader("Analysis Progress")
         
-        # Create columns for different types of updates
+        # Create two-column layout: main output and activity sidebar
         col1, col2 = st.columns([2, 1])
         
         with col1:
-            # Agent messages streaming output
+            # Left column: Agent's main reasoning and analysis output
             st.markdown("**Agent Output:**")
-            agent_output = st.empty()
+            agent_output = st.empty()  # Placeholder for live text updates
             
         with col2:
-            # Tool calls and status updates
+            # Right column: Tool usage and activity notifications
             st.markdown("**Tool Activity:**")
-            tool_activity = st.empty()
+            tool_activity = st.empty()  # Placeholder for tool execution updates
         
-        # Event log at bottom
+        # Bottom section: Event timeline for tracking analysis progress
         st.markdown("**Event Log:**")
-        event_log = st.empty()
+        event_log = st.empty()  # Placeholder for event history
     
     return agent_output, tool_activity, event_log
 
 
-## MAIN APP ##
+## MAIN APPLICATION INTERFACE ##
 
-# Page configuration
+# Configure Streamlit page settings and layout
 st.set_page_config(
     page_title="Data Science Analysis Tool",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    layout="wide",  # Use full screen width
+    initial_sidebar_state="expanded",  # Show sidebar by default
     page_icon="📊"
 )
 
-# CSS styling for the streaming UI
+# Custom CSS styling for the streaming interface components
 st.markdown("""
 <style>
     .streaming-text {
@@ -127,7 +152,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
+# Initialize session state variables for maintaining application state
 if 'analysis_running' not in st.session_state:
     st.session_state.analysis_running = False
 
@@ -137,22 +162,22 @@ if 'cancel_analysis' not in st.session_state:
 if 'analytics_data' not in st.session_state:
     st.session_state.analytics_data = None
 
-# Main header
+# Main application header and description
 st.title("📊 Data Science Analysis Tool")
 st.markdown("Upload your data and analyze it using AI agents with **live streaming**")
 
-# Sidebar configuration  
+# Sidebar configuration panel
 with st.sidebar:
     st.header("⚙️ Configuration")
     
-    # Agent mode selection
+    # Agent mode selection: Single vs Multi-Agent
     agent_mode = st.radio(
         "Analysis Mode",
         ["Single Agent", "Multi-Agent"],
         help="Single Agent: One AI handles all phases. Multi-Agent: Specialized agents for different phases."
     )
     
-    # Streaming toggle
+    # Toggle for live streaming display
     show_live_streaming = st.checkbox(
         "🔴 Show Live Progress",
         value=True,
@@ -161,18 +186,18 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Model selection
+    # Model selection and configuration
     st.subheader("🤖 Model Settings")
     
-    # Available models from token costs
+    # Available AI models with different capabilities and costs
     available_models = [
-        "gpt-4o-mini",
-        "gpt-4o", 
-        "gpt-4",
-        "gpt-3.5-turbo"
+        "gpt-4o-mini",  # Fast and economical
+        "gpt-4o",       # Latest and most capable
+        "gpt-4",        # Previous generation, still very capable
+        "gpt-3.5-turbo" # Fastest and most economical
     ]
     
-    # Model descriptions
+    # Model descriptions to help users choose
     model_descriptions = {
         "gpt-4o-mini": "Fast and cost-effective, ideal for most data analysis tasks",
         "gpt-4o": "Latest GPT-4 model with best performance and reasoning capabilities", 
@@ -180,22 +205,23 @@ with st.sidebar:
         "gpt-3.5-turbo": "Fastest and most economical option for basic analysis"
     }
     
+    # Model selection dropdown
     selected_model = st.selectbox(
         "Choose AI Model",
         available_models,
-        index=0,  # Default to gpt-4o-mini
+        index=0,  # Default to gpt-4o-mini for cost-effectiveness
         help="Select the AI model for analysis"
     )
     
-    # Show model description and pricing
+    # Display model information and pricing
     if selected_model:
         from data_science_agents.config.settings import TOKEN_COSTS
         costs = TOKEN_COSTS[selected_model]
         
-        # Description
+        # Show model description
         st.markdown(f"**{model_descriptions[selected_model]}**")
         
-        # Pricing in a clean, smaller format
+        # Display pricing information in a clean format
         st.markdown("**Pricing per 1 million tokens:**")
         col1, col2 = st.columns(2)
         with col1:
@@ -203,10 +229,10 @@ with st.sidebar:
         with col2:
             st.write(f"📤 **Output:** ${costs['output']:.2f}")
 
-# Main layout
+# Main content area: Data upload and analysis
 st.header("📁 Data Upload & Analysis")
 
-# File upload section
+# File upload widget for datasets
 uploaded_file = st.file_uploader(
     "Choose your dataset",
     type=SUPPORTED_FILE_TYPES,
@@ -216,19 +242,19 @@ uploaded_file = st.file_uploader(
 # Immediate data preview when file is uploaded
 if uploaded_file:
     try:
-        # Load and preview data immediately
+        # Load data based on file type
         if uploaded_file.name.endswith('.csv'):
             df = pd.read_csv(uploaded_file)
         else:
             df = pd.read_excel(uploaded_file)
         
-        # File info in compact format
+        # Display file information
         st.success(f"✅ **{uploaded_file.name}** - {df.shape[0]:,} rows × {df.shape[1]} columns")
         
-        # Immediate data preview
+        # Data preview section
         st.subheader("📋 Dataset Preview")
         
-        # Key stats in compact format
+        # Key statistics in a compact metric layout
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Rows", f"{df.shape[0]:,}")
@@ -239,10 +265,10 @@ if uploaded_file:
         with col4:
             st.metric("Missing Values", f"{df.isnull().sum().sum():,}")
         
-        # Data preview table
+        # Display first 10 rows of data
         st.dataframe(df.head(10), use_container_width=True)
         
-        # Column information in expandable section
+        # Detailed column information in expandable section
         with st.expander("📊 Column Details"):
             col_info = pd.DataFrame({
                 'Column': df.columns,
@@ -253,7 +279,7 @@ if uploaded_file:
             })
             st.dataframe(col_info, use_container_width=True)
         
-        # Reset file pointer for analysis
+        # Reset file pointer for analysis use
         uploaded_file.seek(0)
         
     except Exception as e:
@@ -262,7 +288,7 @@ if uploaded_file:
 # Analysis request section
 st.subheader("🎯 Analysis Request")
 
-# Analysis prompt input
+# Text area for user to describe their analysis needs
 user_prompt = st.text_area(
     "Describe your analysis needs",
     value="Please find the effect the explanatory variables have on the target variable winpercent and visualize your results.",
@@ -270,9 +296,10 @@ user_prompt = st.text_area(
     help="Be specific about what insights you're looking for"
 )
 
-# Analysis buttons with stop functionality
+# Control buttons for starting and stopping analysis
 col1, col2, col3 = st.columns([1, 2, 1])
 with col1:
+    # Stop button (only enabled when analysis is running)
     stop_analysis = st.button(
         "🛑 Stop Analysis",
         disabled=not st.session_state.analysis_running,
@@ -283,6 +310,7 @@ with col1:
         st.warning("⏹️ Cancellation requested...")
 
 with col2:
+    # Main analysis button (disabled when running or missing requirements)
     run_analysis = st.button(
         f"🚀 Run {agent_mode} Analysis",
         type="primary",
@@ -291,66 +319,70 @@ with col2:
     )
 
 with col3:
-    st.empty()  # Spacing
+    st.empty()  # Spacing column
 
-# Run analysis when button is clicked
+# Handle analysis start
 if run_analysis:
+    # Set running state and reset cancellation flag
     st.session_state.analysis_running = True
     st.session_state.cancel_analysis = False
     st.session_state.analytics_data = None
     
-    # Save uploaded file and analysis details
+    # Store analysis configuration in session state
     st.session_state.file_name = uploaded_file.name
     st.session_state.user_prompt = user_prompt
     st.session_state.agent_mode = agent_mode
     st.session_state.show_live_streaming = show_live_streaming
     st.session_state.selected_model = selected_model  
     
-    # Save the file to working directory
+    # Save uploaded file to working directory for analysis
     with open(uploaded_file.name, 'wb') as f:
         f.write(uploaded_file.getvalue())
     
-    # Force page refresh to show the stop button as enabled
+    # Force page refresh to update UI state
     st.rerun()
 
-# Run analysis if we're in running state
+# Main analysis execution block
 if st.session_state.analysis_running and 'file_name' in st.session_state:
-    # Create analysis prompt
+    # Create formatted analysis prompt for the AI agents
     analysis_prompt = ANALYSIS_PROMPT_TEMPLATE.format(
         file_name=st.session_state.file_name,
         user_prompt=st.session_state.user_prompt
     )
     
-    # === STREAMING ANALYSIS ===
+    # === LIVE ANALYTICS DISPLAY ===
     st.markdown("---")
     
-    # Create live analytics display at the top
+    # Create live analytics metrics at the top
     st.subheader("📊 Analytics")
     analytics_col1, analytics_col2, analytics_col3, analytics_col4 = st.columns(4)
     with analytics_col1:
-        duration_metric = st.empty()
+        duration_metric = st.empty()  # Live duration counter
     with analytics_col2:
-        tools_metric = st.empty()
+        tools_metric = st.empty()     # Tool usage counter
     with analytics_col3:
-        cost_metric = st.empty()
+        cost_metric = st.empty()      # Cost estimation
     with analytics_col4:
-        images_metric = st.empty()
+        images_metric = st.empty()    # Image creation counter
     
     st.markdown("---")
     
-    # Create streaming UI containers only if user wants to see live progress
+    # Create streaming interface if user wants live progress
     if st.session_state.show_live_streaming:
         agent_output, tool_activity, event_log = create_streaming_ui()
     
     def update_live_analytics_from_event(analytics_content: str):
         """
-        Parse analytics event from agent systems and update display.
+        Parse analytics events from agent systems and update the live display.
         
-        This maintains our simplifications - agent systems track analytics
-        using our helpers, and share the data via events. No duplicate tracking.
+        Agent systems send periodic analytics updates in a structured format.
+        This function parses those updates and refreshes the metrics display.
+        
+        Args:
+            analytics_content (str): Formatted analytics data from agent systems
         """
         try:
-            # Parse format: "ANALYTICS_UPDATE|45.2|8|0.0142|3"
+            # Parse format: "ANALYTICS_UPDATE|duration|tool_calls|cost|images"
             parts = analytics_content.split("|")
             if len(parts) >= 5 and parts[0] == "ANALYTICS_UPDATE":
                 duration = float(parts[1])
@@ -358,22 +390,28 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                 cost = float(parts[3])
                 images = int(parts[4])
                 
-                # Update the live display
+                # Update the live metrics display
                 duration_metric.metric("Duration", f"{duration:.1f}s")
                 tools_metric.metric("Tool Calls", tool_calls)
                 cost_metric.metric("Est. Cost", f"${cost:.4f}")
                 images_metric.metric("Images", images)
         except:
-            pass  # Ignore parsing errors
+            # Ignore parsing errors to maintain stability
+            pass
     
     async def run_streaming_analysis():
         """
-        SPECIALIST STREAMING: Handles events from both orchestrator and specialists.
-        Shows real-time specialist work with complete transparency.
+        Main analysis execution function with real-time streaming.
+        
+        This function coordinates the entire analysis process:
+        1. Starts the appropriate agent system (single or multi-agent)
+        2. Processes streaming events for live UI updates
+        3. Handles user cancellation and error conditions
+        4. Displays final results and created visualizations
         """
         
         try:
-            # Choose analysis function based on mode
+            # Choose analysis approach based on user selection
             if st.session_state.agent_mode == "Single Agent":
                 analysis_stream = run_single_agent_analysis(
                     analysis_prompt, 
@@ -389,46 +427,49 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                     model=st.session_state.get('selected_model', 'gpt-4o-mini')
                 )
             
-            # Initialize streaming variables only if showing live progress
+            # Initialize streaming variables for live display
             if st.session_state.show_live_streaming:
-                agent_text = ""
-                full_agent_text = ""
-                text_buffer = ""
+                agent_text = ""           # Current visible text in agent output
+                full_agent_text = ""      # Complete conversation history
+                text_buffer = ""          # Buffer for batching text updates
                 last_text_update = time.time()
                 
-                full_conversation = []
-                tool_events = deque()
-                event_history = deque()
+                full_conversation = []    # Complete conversation log
+                tool_events = deque()     # Tool activity timeline
+                event_history = deque()   # Event history for debugging
                 
-                # Time-based update tracking
+                # Timing controls for UI update frequency
                 last_tool_update = time.time()
                 event_counter = 0
             
-            # Main event loop for streaming analysis
+            # Main event processing loop
             async for event in analysis_stream:
                 current_time = time.time()
                 
-                # === PARSE ANALYTICS EVENTS (NO manual tracking) ===
+                # === ANALYTICS PROCESSING ===
+                # Update live analytics display when agents send updates
                 if event.event_type == "analytics_update":
                     update_live_analytics_from_event(event.content)
                 
-                # Process streaming events if live streaming is enabled
+                # === LIVE STREAMING DISPLAY ===
+                # Process events for real-time UI updates
                 if st.session_state.show_live_streaming:
                     if event.event_type == "text_delta":
-                        # Buffer text updates for performance
+                        # Handle incremental text updates (like ChatGPT typing effect)
                         text_buffer += event.content
                         full_agent_text += event.content
                         
-                        # Show which agent is talking
+                        # Add agent identification for multi-agent clarity
                         agent_prefix = ""
                         if "Agent" in event.agent_name and event.agent_name != "Agent":
                             agent_prefix = f"[{event.agent_name}] "
                         
+                        # Update display periodically for performance
                         if current_time - last_text_update >= 2.5:
                             agent_text += agent_prefix + text_buffer
                             text_buffer = ""
                             
-                            # Limit live visible text to 500 characters for better performance
+                            # Limit visible text length for performance
                             if len(agent_text) > 500:
                                 agent_text = agent_text[-500:]
                             
@@ -436,14 +477,16 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                             last_text_update = current_time
                     
                     elif event.event_type == "tool_call":
+                        # Display tool execution notifications
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
                         
                         if current_time - last_tool_update >= 2.5:
-                            recent_tools = list(tool_events)[-3:]  # Show more for specialists
+                            recent_tools = list(tool_events)[-3:]
                             tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(recent_tools)}</div>', unsafe_allow_html=True)
                             last_tool_update = current_time
                     
                     elif event.event_type == "tool_output":
+                        # Display tool completion notifications
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - ✅ Execution completed")
                         
                         if current_time - last_tool_update >= 2.5:
@@ -452,7 +495,7 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                             last_tool_update = current_time
                     
                     elif event.event_type == "specialist_start":
-                        # Specialist agent starting work
+                        # Multi-agent: Specialist agent starting work
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
                         
                         if current_time - last_tool_update >= 1.0:
@@ -461,7 +504,7 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                             last_tool_update = current_time
                     
                     elif event.event_type == "specialist_complete":
-                        # Specialist agent finished work
+                        # Multi-agent: Specialist agent finished work
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
                         
                         if current_time - last_tool_update >= 1.0:
@@ -470,10 +513,12 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                             last_tool_update = current_time
                     
                     elif event.event_type == "agent_reasoning": 
+                        # Display agent reasoning for multi-agent mode
                         if st.session_state.agent_mode == "Multi-Agent":
                             full_agent_text += f"\n🤔 {event.agent_name}: {event.content}\n"
 
                     elif event.event_type in ["agent_handoff", "agent_result", "sub_agent_start", "sub_agent_complete"]:
+                        # Handle agent coordination events
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
                         
                         if current_time - last_tool_update >= 2.5:
@@ -482,7 +527,7 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                             last_tool_update = current_time
                     
                     elif event.event_type == "message_complete":
-                        # Flush any remaining text buffer
+                        # Flush any remaining text buffer at message completion
                         if text_buffer:
                             agent_text += text_buffer
                             full_agent_text += text_buffer
@@ -496,7 +541,7 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                         # Reset for next message
                         agent_text = ""
                     
-                    # Add events to history
+                    # Update event history for debugging and monitoring
                     if event.event_type not in ["text_delta", "analytics_update"]:
                         event_display = event.event_type
                         if event.event_type in ["specialist_start", "specialist_complete"]:
@@ -505,15 +550,17 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                         event_history.append(f"[{event.agent_name}] {event_display}")
                         event_counter += 1
                         
-                        if event_counter % 5 == 0:  # More frequent updates for specialists
+                        # Update event log periodically
+                        if event_counter % 5 == 0:
                             recent_events = list(event_history)[-4:]
                             event_log.markdown(f'<div class="event-log">{"<br>".join(recent_events)}</div>', unsafe_allow_html=True)
                     
-                    # Small delay for streaming visibility
+                    # Small delay for smooth streaming effect
                     await asyncio.sleep(0.05)
                 
-                # Handle completion or error
+                # === COMPLETION AND ERROR HANDLING ===
                 if event.event_type == "analysis_complete":
+                    # Analysis completed successfully
                     st.session_state.analysis_running = False
                     
                     # Flush any remaining text buffer
@@ -524,7 +571,7 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                             agent_text = agent_text[-600:]
                         agent_output.markdown(f'<div class="streaming-text">{agent_text}</div>', unsafe_allow_html=True)
                     
-                    # Convert live windows to full scrollable versions
+                    # Convert live displays to final scrollable versions
                     if st.session_state.show_live_streaming:
                         if full_agent_text or full_conversation:
                             combined_content = ""
@@ -545,34 +592,37 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                     
                     st.success("🎉 Analysis completed!")
                     
-                    # Show final results
+                    # Display final analysis results
                     st.markdown("### 📊 Final Analysis Results")
                     st.markdown(event.content)
                     
-                    # Show images using single source from execution.py
+                    # Display any visualizations created during analysis
                     images = get_created_images()
                     if images:
-                        time.sleep(0.3)
+                        time.sleep(0.3)  # Brief pause for UI stability
                         st.markdown("---")
                         display_images_gallery(images)
                     
                     return
                     
                 elif event.event_type == "analysis_error":
+                    # Analysis failed with error
                     st.session_state.analysis_running = False
                     st.error(event.content)
                     return
                     
                 elif event.event_type == "analysis_cancelled":
+                    # Analysis cancelled by user
                     st.session_state.analysis_running = False
                     st.warning(event.content)
                     return
                     
         except Exception as e:
+            # Handle unexpected errors during analysis
             st.error(f"Streaming analysis failed: {str(e)}")
             st.session_state.analysis_running = False
     
-    # Run streaming analysis
+    # Execute the analysis with error handling
     try:
         asyncio.run(run_streaming_analysis())
     except Exception as e:

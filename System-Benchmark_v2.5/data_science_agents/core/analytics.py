@@ -1,22 +1,23 @@
 """
-data_science_agents/core/analytics.py - Analytics tracking with setup helpers
+data_science_agents/core/analytics.py - Comprehensive Analytics Tracking System
 
-This module provides:
-1. AnalyticsTracker class for comprehensive performance monitoring
-2. Helper functions to eliminate setup duplication across agent systems
-3. Model-aware cost calculation using pricing from settings.py
-4. Single source of truth for all analysis metrics
-
-Purpose: Centralizes all analytics functionality and provides helpers to eliminate
-the duplicate analytics setup code that was repeated in both single_agent.py
-and multi_agent.py systems.
+This module provides the core analytics infrastructure for monitoring and tracking
+all aspects of data science analysis performance:
 
 Key Features:
-- Tracks agent timing, tool usage, token consumption, and costs
-- Model-specific cost calculation (different prices for different AI models)
-- Integration with context system for state sharing
-- Standardized setup/teardown patterns
+- Real-time tracking of agent timing, tool usage, and token consumption
+- Model-specific cost calculation using current pricing from OpenAI
+- Support for both single-agent and multi-agent analysis modes
+- Integration with the context system for state sharing across components
+- Helper functions to eliminate code duplication across agent systems
+
+Purpose:
+This serves as the single source of truth for all analysis metrics, enabling
+accurate cost tracking, performance monitoring, and real-time UI updates.
+The analytics system integrates seamlessly with both analysis modes while
+maintaining clear separation of concerns.
 """
+
 import time
 from typing import Dict, List, Optional, TYPE_CHECKING
 from dataclasses import dataclass, field
@@ -31,17 +32,18 @@ if TYPE_CHECKING:
 @dataclass
 class AgentTiming:
     """
-    Tracks performance metrics for individual agents.
+    Performance metrics tracker for individual agents.
     
-    In multi-agent mode, this lets us see which specialist agents
-    take the most time and resources, helping optimize the system.
+    In single-agent mode, this tracks the one comprehensive agent.
+    In multi-agent mode, this provides detailed timing for each specialist,
+    enabling performance analysis and system optimization.
     
     Attributes:
-        agent_name: Human-readable name (e.g., "Data Understanding Agent")
-        start_time: Unix timestamp when agent started
-        end_time: Unix timestamp when agent finished (None if still running)
-        duration: Calculated runtime in seconds (None until finished)
-        tool_calls: Number of tools this agent used (code execution, etc.)
+        agent_name (str): Human-readable agent identifier
+        start_time (float): Unix timestamp when agent began work
+        end_time (float): Unix timestamp when agent finished (None if running)
+        duration (float): Calculated runtime in seconds (None until finished)
+        tool_calls (int): Number of tools this agent used during execution
     """
     agent_name: str
     start_time: float
@@ -51,8 +53,11 @@ class AgentTiming:
     
     def finish(self):
         """
-        Mark this agent as finished and calculate final duration.
-        Called when an agent completes its work.
+        Mark this agent as completed and calculate final duration.
+        
+        This method is called when an agent completes its work, either
+        successfully or due to an error. It ensures accurate timing data
+        for performance analysis.
         """
         self.end_time = time.time()
         self.duration = self.end_time - self.start_time
@@ -61,21 +66,24 @@ class AgentTiming:
 @dataclass
 class AnalyticsTracker:
     """
-    Comprehensive analytics tracking for data science analysis runs.
+    Comprehensive analytics tracking for data science analysis sessions.
     
-    This is the single source of truth for all performance metrics during
-    an analysis. It tracks everything from basic timing to cost estimation
-    and integrates with the broader system for real-time monitoring.
+    This class serves as the central hub for all performance metrics during
+    an analysis. It tracks everything from basic timing to detailed cost
+    estimation and provides real-time data for UI updates.
     
     Key Responsibilities:
     1. Track timing for overall analysis and individual agents
-    2. Monitor tool usage (how many times agents executed code, etc.)
-    3. Estimate token consumption and calculate costs using actual model pricing
-    4. Provide real-time summaries for UI display
-    5. Support different analysis modes (single vs multi-agent)
+    2. Monitor tool usage (code execution, agent calls, etc.)
+    3. Estimate token consumption and calculate costs using model-specific pricing
+    4. Provide real-time summaries for UI display and monitoring
+    5. Support both single-agent and multi-agent analysis modes
     
-    Design Note: This does NOT track images - that's handled by execution.py
-    to avoid duplication and maintain clear separation of concerns.
+    Design Philosophy:
+    - Single source of truth for all analysis metrics
+    - Model-aware cost calculation for accurate budgeting
+    - Real-time updates for immediate user feedback
+    - Clean separation from execution concerns (images tracked in execution.py)
     """
     
     # === TIMING TRACKING ===
@@ -92,7 +100,7 @@ class AnalyticsTracker:
     
     # === TOKEN AND COST TRACKING ===
     # Separated input/output tokens for accurate cost calculation
-    # (OpenAI charges different rates for input vs output tokens)
+    # OpenAI charges different rates for input vs output tokens
     estimated_input_tokens: int = 0
     estimated_output_tokens: int = 0
     estimated_cost: float = 0.0
@@ -109,12 +117,12 @@ class AnalyticsTracker:
         """
         Begin tracking a new agent's performance.
         
-        This is called when an agent starts work. In single-agent mode,
-        there's just one call. In multi-agent mode, this is called for
-        each specialist agent as they take control.
+        This method is called when an agent starts work. In single-agent mode,
+        there's typically just one call. In multi-agent mode, this is called
+        for each specialist agent as they take control of their phase.
         
         Args:
-            agent_name: Human-readable agent name for tracking
+            agent_name (str): Human-readable agent name for tracking
         """
         # Finish the previous agent if one was running
         if self.current_agent and self.current_agent in self.agent_timings:
@@ -131,8 +139,11 @@ class AnalyticsTracker:
         """
         Mark an agent as completed and record its final metrics.
         
+        This method should be called when an agent completes its work,
+        regardless of whether it finished successfully or encountered an error.
+        
         Args:
-            agent_name: Name of the agent that just finished
+            agent_name (str): Name of the agent that just finished
         """
         if agent_name in self.agent_timings:
             self.agent_timings[agent_name].finish()
@@ -142,56 +153,63 @@ class AnalyticsTracker:
 
     def estimate_tokens_from_content(self, content: str):
         """
-        Estimate token usage from text content.
+        Estimate token usage from text content during streaming.
         
-        This is called during streaming when we receive text from the AI model.
-        We assume this is output content (agent responses) rather than input.
+        This method is called during real-time streaming when we receive text
+        from the AI model. We assume this is output content (agent responses)
+        rather than input content.
         
-        Token estimation rule: Roughly 4 characters = 1 token (OpenAI's rule of thumb)
+        Token Estimation Rule: Approximately 4 characters = 1 token
+        This is OpenAI's commonly cited rule of thumb for English text.
         
         Args:
-            content: Text content from AI model response
+            content (str): Text content from AI model response
         """
         estimated_tokens = len(content) / 4
         self.add_output_tokens(int(estimated_tokens))
 
     def add_input_tokens(self, token_count: int):
         """
-        Add input tokens (user prompts, context, etc.) and update cost.
+        Add input tokens and update cost calculation.
         
-        Input tokens are what we send TO the AI model (prompts, data descriptions, etc.)
+        Input tokens represent what we send TO the AI model, including
+        prompts, context, data descriptions, and previous conversation history.
         These typically cost less than output tokens.
         
         Args:
-            token_count: Number of input tokens to add
+            token_count (int): Number of input tokens to add
         """
         self.estimated_input_tokens += token_count
         self._update_cost_calculation()
         
     def add_output_tokens(self, token_count: int):
         """
-        Add output tokens (AI responses) and update cost.
+        Add output tokens and update cost calculation.
         
-        Output tokens are what we get FROM the AI model (analysis, code, insights, etc.)
-        These typically cost more than input tokens.
+        Output tokens represent what we get FROM the AI model, including
+        analysis, code, insights, and reasoning. These typically cost more
+        than input tokens in most pricing models.
         
         Args:
-            token_count: Number of output tokens to add
+            token_count (int): Number of output tokens to add
         """
         self.estimated_output_tokens += token_count
         self._update_cost_calculation()
 
     def _update_cost_calculation(self):
         """
-        Update cost calculation using model-specific rates from settings.py.
+        Update cost calculation using model-specific rates from settings.
         
-        This is called automatically whenever tokens are added. It ensures
+        This method is called automatically whenever tokens are added. It ensures
         that cost estimates are always current and use the correct pricing
         for whichever AI model the user selected.
         
-        Why this matters: Different models have very different costs
+        Why Model-Specific Pricing Matters:
         - gpt-4o-mini: $0.15 input, $0.60 output (per 1M tokens)
         - gpt-4o: $3.00 input, $10.00 output (per 1M tokens)
+        - gpt-4: $30.00 input, $60.00 output (per 1M tokens)
+        
+        The cost difference between models can be 20x or more!
         """
         self.estimated_cost = get_model_cost(
             self.model_name, 
@@ -203,11 +221,12 @@ class AnalyticsTracker:
         """
         Record that an agent used a tool.
         
-        Tools include things like executing Python code, calling other agents,
-        searching the web, etc. This helps track how much work agents are doing.
+        Tools include various capabilities like executing Python code,
+        calling other agents, searching databases, etc. This helps track
+        how much computational work agents are doing.
         
         Args:
-            agent_name: Which agent used the tool (for per-agent tracking)
+            agent_name (str): Which agent used the tool (for per-agent tracking)
         """
         self.total_tool_calls += 1
         if agent_name and agent_name in self.agent_timings:
@@ -217,11 +236,12 @@ class AnalyticsTracker:
         """
         Set the AI model being used and recalculate costs.
         
-        This should be called when the analysis starts to ensure cost
-        calculations use the correct pricing for the selected model.
+        This method should be called when the analysis starts to ensure cost
+        calculations use the correct pricing for the selected model. It also
+        handles cases where the model might change during analysis.
         
         Args:
-            model_name: Model identifier (e.g., "gpt-4o-mini", "gpt-4o")
+            model_name (str): Model identifier (e.g., "gpt-4o-mini", "gpt-4o")
         """
         self.model_name = model_name
         self._update_cost_calculation()  # Recalculate with new model rates
@@ -230,9 +250,9 @@ class AnalyticsTracker:
         """
         Mark the entire analysis as completed and finalize all metrics.
         
-        This should be called when the analysis is completely done,
-        regardless of success or failure. It ensures all timing data
-        is properly calculated and agents are marked as finished.
+        This method should be called when the analysis is completely done,
+        regardless of success or failure. It ensures all timing data is
+        properly calculated and any running agents are marked as finished.
         """
         self.end_time = time.time()
         self.total_duration = self.end_time - self.start_time
@@ -245,24 +265,24 @@ class AnalyticsTracker:
         """
         Get complete analytics summary for display and storage.
         
-        This provides all the key metrics in a standardized format that
+        This method provides all key metrics in a standardized format that
         can be used by the UI, stored in session state, or logged for
-        system monitoring.
+        system monitoring and analysis.
         
         Returns:
-            Dictionary containing all analytics data:
-            - total_duration: Overall analysis time
-            - agent_durations: Per-agent timing breakdown
-            - tool_calls: Total number of tool uses
-            - phases_completed: Number of CRISP-DM phases finished
-            - estimated_cost: Total cost in USD
-            - token counts: Input/output token usage
-            - images_created: Number of visualizations (from execution.py)
+            Dict: Complete analytics data including:
+                - total_duration: Overall analysis time in seconds
+                - agent_durations: Per-agent timing breakdown
+                - tool_calls: Total number of tool uses across all agents
+                - phases_completed: Number of CRISP-DM phases finished
+                - estimated_cost: Total estimated cost in USD
+                - token counts: Detailed input/output token usage
+                - images_created: Number of visualizations (from execution.py)
         """
         # Import here to avoid circular import issues
         from data_science_agents.core.execution import get_created_images
         
-        # Calculate per-agent durations for breakdown analysis
+        # Calculate per-agent durations for performance analysis
         agent_durations = {
             name: timing.duration or 0 
             for name, timing in self.agent_timings.items()
@@ -283,35 +303,28 @@ class AnalyticsTracker:
 # =============================================================================
 # ANALYTICS SETUP HELPERS
 # =============================================================================
-# These functions eliminate the duplicate analytics setup code that was
-# repeated in both single_agent.py and multi_agent.py. They provide a
-# standardized way to initialize and manage analytics.
 
 def setup_analytics(context: "AnalysisContext", agent_name: str, model_name: str = DEFAULT_MODEL) -> AnalyticsTracker:
     """
     Initialize analytics tracking and attach it to the analysis context.
     
-    This helper eliminates the 4-5 lines of setup code that was duplicated
-    in both agent systems. It creates the tracker, configures it properly,
-    attaches it to the context for sharing, and starts tracking.
+    This helper function provides a standardized way to set up analytics
+    for both single-agent and multi-agent systems. It eliminates code
+    duplication and ensures consistent configuration across all analysis modes.
+    
+    Setup Process:
+    1. Create a new AnalyticsTracker instance
+    2. Configure it with the selected AI model for accurate cost calculation
+    3. Attach it to the analysis context for sharing between components
+    4. Start tracking the primary agent
     
     Args:
-        context: AnalysisContext object that will carry the analytics
-        agent_name: Name of the main agent starting the analysis
-        model_name: AI model being used (for accurate cost calculation)
+        context (AnalysisContext): Context object that will carry the analytics
+        agent_name (str): Name of the main agent starting the analysis
+        model_name (str): AI model being used for accurate cost calculation
         
     Returns:
-        AnalyticsTracker ready for use, already attached to context
-        
-    Example:
-        # Instead of duplicate setup in each agent system:
-        analytics = AnalyticsTracker()
-        context.analytics = analytics
-        analytics.set_model(model)
-        analytics.start_agent("Data Science Agent")
-        
-        # Use helper:
-        analytics = setup_analytics(context, "Data Science Agent", model)
+        AnalyticsTracker: Configured tracker, ready for use and attached to context
     """
     analytics = AnalyticsTracker()
     analytics.set_model(model_name)  # Configure for accurate cost calculation
@@ -325,17 +338,18 @@ def analytics_context(context: "AnalysisContext", agent_name: str, model_name: s
     """
     Context manager for analytics that ensures proper cleanup.
     
-    This provides automatic setup and teardown of analytics tracking,
-    ensuring that analytics are always properly finished even if
-    errors occur during analysis.
+    This context manager provides automatic setup and teardown of analytics
+    tracking, ensuring that analytics are always properly finished even if
+    errors occur during analysis. It's particularly useful for ensuring
+    robust error handling.
     
     Args:
-        context: AnalysisContext to attach analytics to
-        agent_name: Name of the main agent
-        model_name: AI model being used
+        context (AnalysisContext): Context to attach analytics to
+        agent_name (str): Name of the main agent
+        model_name (str): AI model being used
         
     Yields:
-        AnalyticsTracker configured and ready for use
+        AnalyticsTracker: Configured and ready for use
         
     Example:
         with analytics_context(context, "Data Science Agent", model) as analytics:
@@ -355,16 +369,17 @@ def create_analytics_summary_event(analytics: AnalyticsTracker) -> str:
     """
     Create a formatted analytics summary for display in the UI.
     
-    This provides consistent formatting of analytics data across
-    both agent systems for the final results display.
+    This function provides consistent formatting of analytics data across
+    both agent systems for final results display. It creates a concise
+    summary that highlights the key performance metrics users care about.
     
     Args:
-        analytics: AnalyticsTracker with completed analysis data
+        analytics (AnalyticsTracker): Tracker with completed analysis data
         
     Returns:
-        Formatted string ready for UI display
+        str: Formatted string ready for UI display
         
-    Example output:
+    Example Output:
         "📊 Analytics: 45.2s, 8 tools, 3 phases, $0.0142"
     """
     summary = analytics.get_summary()
