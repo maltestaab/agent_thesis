@@ -5,6 +5,7 @@ This module provides:
 1. Core event classes used throughout the streaming system
 2. Helper functions to reduce duplication in event creation
 3. Standardized event patterns for consistent UI updates
+4. Analytics event helpers for sharing metrics with streamlit
 
 Purpose: Eliminates repetitive StreamingEvent creation code that was duplicated
 across agent systems, making event creation consistent and easier to maintain.
@@ -22,9 +23,12 @@ class StreamingEvent:
     - "text_delta": Incremental text updates (like ChatGPT typing)
     - "tool_call": When an agent starts using a tool (running code, etc.)
     - "tool_output": When tool execution completes
+    - "specialist_start": When a specialist agent begins work
+    - "specialist_complete": When a specialist agent finishes
     - "analysis_complete": Final results ready
     - "analysis_error": Something went wrong
     - "analytics_complete": Final metrics ready
+    - "analytics_update": Live metrics update
     
     Args:
         event_type: Category of event (determines UI handling)

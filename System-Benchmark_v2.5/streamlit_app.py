@@ -1,11 +1,11 @@
 """
-streamlit_app.py - Main Web Interface with Proper Analytics (NO manual tracking)
+streamlit_app.py - Main Web Interface with Specialist Streaming Support
 
-PROPER FIX:
-- NO manual analytics tracking in streamlit
-- Parse analytics events from agent systems 
-- Maintains all our simplifications
-- Agent systems share their analytics via events
+STREAMING SPECIALISTS:
+- Handles real-time events from both orchestrator and specialist agents
+- Shows specialist reasoning, code execution, and results as they happen
+- Provides complete transparency into multi-agent workflow
+- Maintains all simplifications while adding full specialist visibility
 """
 
 import streamlit as st
@@ -223,8 +223,7 @@ if uploaded_file:
             df = pd.read_excel(uploaded_file)
         
         # File info in compact format
-        file_size = len(uploaded_file.getvalue()) / 1024 / 1024  # MB
-        st.success(f"✅ **{uploaded_file.name}** ({file_size:.2f} MB) - {df.shape[0]:,} rows × {df.shape[1]} columns")
+        st.success(f"✅ **{uploaded_file.name}** - {df.shape[0]:,} rows × {df.shape[1]} columns")
         
         # Immediate data preview
         st.subheader("📋 Dataset Preview")
@@ -369,8 +368,8 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
     
     async def run_streaming_analysis():
         """
-        PROPER APPROACH: No manual analytics tracking.
-        Agent systems handle analytics and share via events.
+        SPECIALIST STREAMING: Handles events from both orchestrator and specialists.
+        Shows real-time specialist work with complete transparency.
         """
         
         try:
@@ -420,13 +419,18 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                         text_buffer += event.content
                         full_agent_text += event.content
                         
+                        # Show which agent is talking
+                        agent_prefix = ""
+                        if "Agent" in event.agent_name and event.agent_name != "Agent":
+                            agent_prefix = f"[{event.agent_name}] "
+                        
                         if current_time - last_text_update >= 2.5:
-                            agent_text += text_buffer
+                            agent_text += agent_prefix + text_buffer
                             text_buffer = ""
                             
-                            # Limit live visible text to 400 characters
-                            if len(agent_text) > 400:
-                                agent_text = agent_text[-400:]
+                            # Limit live visible text to 500 characters for better performance
+                            if len(agent_text) > 500:
+                                agent_text = agent_text[-500:]
                             
                             agent_output.markdown(f'<div class="streaming-text">{agent_text}</div>', unsafe_allow_html=True)
                             last_text_update = current_time
@@ -435,7 +439,7 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
                         
                         if current_time - last_tool_update >= 2.5:
-                            recent_tools = list(tool_events)[-2:]
+                            recent_tools = list(tool_events)[-3:]  # Show more for specialists
                             tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(recent_tools)}</div>', unsafe_allow_html=True)
                             last_tool_update = current_time
                     
@@ -443,7 +447,25 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - ✅ Execution completed")
                         
                         if current_time - last_tool_update >= 2.5:
-                            recent_tools = list(tool_events)[-2:]
+                            recent_tools = list(tool_events)[-3:]
+                            tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(recent_tools)}</div>', unsafe_allow_html=True)
+                            last_tool_update = current_time
+                    
+                    elif event.event_type == "specialist_start":
+                        # Specialist agent starting work
+                        tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
+                        
+                        if current_time - last_tool_update >= 1.0:
+                            recent_tools = list(tool_events)[-3:]
+                            tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(recent_tools)}</div>', unsafe_allow_html=True)
+                            last_tool_update = current_time
+                    
+                    elif event.event_type == "specialist_complete":
+                        # Specialist agent finished work
+                        tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
+                        
+                        if current_time - last_tool_update >= 1.0:
+                            recent_tools = list(tool_events)[-3:]
                             tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(recent_tools)}</div>', unsafe_allow_html=True)
                             last_tool_update = current_time
                     
@@ -455,7 +477,7 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                         tool_events.append(f"⏰ {time.strftime('%H:%M:%S')} - {event.content}")
                         
                         if current_time - last_tool_update >= 2.5:
-                            recent_tools = list(tool_events)[-2:]
+                            recent_tools = list(tool_events)[-3:]
                             tool_activity.markdown(f'<div class="tool-activity">{"<br>".join(recent_tools)}</div>', unsafe_allow_html=True)
                             last_tool_update = current_time
                     
@@ -466,8 +488,8 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                             full_agent_text += text_buffer
                             text_buffer = ""
                             
-                            if len(agent_text) > 400:
-                                agent_text = agent_text[-400:]
+                            if len(agent_text) > 500:
+                                agent_text = agent_text[-500:]
                             
                             agent_output.markdown(f'<div class="streaming-text">{agent_text}</div>', unsafe_allow_html=True)
                         
@@ -476,11 +498,15 @@ if st.session_state.analysis_running and 'file_name' in st.session_state:
                     
                     # Add events to history
                     if event.event_type not in ["text_delta", "analytics_update"]:
-                        event_history.append(f"[{event.agent_name}] {event.event_type}")
+                        event_display = event.event_type
+                        if event.event_type in ["specialist_start", "specialist_complete"]:
+                            event_display = f"{event.event_type} ({event.agent_name})"
+                        
+                        event_history.append(f"[{event.agent_name}] {event_display}")
                         event_counter += 1
                         
-                        if event_counter % 8 == 0:
-                            recent_events = list(event_history)[-3:]
+                        if event_counter % 5 == 0:  # More frequent updates for specialists
+                            recent_events = list(event_history)[-4:]
                             event_log.markdown(f'<div class="event-log">{"<br>".join(recent_events)}</div>', unsafe_allow_html=True)
                     
                     # Small delay for streaming visibility
