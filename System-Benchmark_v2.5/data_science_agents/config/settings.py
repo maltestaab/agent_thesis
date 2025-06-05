@@ -77,34 +77,43 @@ IMAGES_DIR = "Images"
 
 
 # =============================================================================
-# AI MODEL PRICING (CURRENT AS OF JANUARY 2025)
+# AI MODEL PRICING (CURRENT AS OF JUNE 2025)
 # =============================================================================
 # Cost per 1 million tokens for different OpenAI models
 # These prices are used for real-time cost estimation during analysis
 
 TOKEN_COSTS = {
-    # GPT-4o Mini: Most cost-effective option, excellent for most data analysis
+    # GPT-4o Mini: Reliable and cost-effective for testing and general use
     "gpt-4o-mini": {
-        "input": 0.15,   # Cost per 1M input tokens (prompts, context)
-        "output": 0.60   # Cost per 1M output tokens (agent responses)
+        "input": 0.15,   # Cost per 1M input tokens - reliable model good for testing
+        "output": 0.60   # Well-established performance with 128K context window
     },
     
-    # GPT-4o: Latest and most capable model, best for complex analysis
-    "gpt-4o": {
-        "input": 3.00,   # Higher cost but superior reasoning capabilities
-        "output": 10.00  # Premium pricing for state-of-the-art performance
+    # GPT-4.1 Series: Latest general-purpose models with 1M token context
+    "gpt-4.1": {
+        "input": 2.00,   # Cost per 1M input tokens - flagship model with best performance
+        "output": 8.00   # Advanced coding and instruction following capabilities
     },
     
-    # GPT-4: Previous generation, still very capable for data science
-    "gpt-4": {
-        "input": 30.00,  # Legacy pricing, generally superseded by gpt-4o
-        "output": 60.00  # Most expensive option, rarely recommended
+    "gpt-4.1-mini": {
+        "input": 0.40,   # Cost per 1M input tokens - balanced performance and cost
+        "output": 1.60   # Nearly matches full GPT-4.1 performance at lower cost
     },
     
-    # GPT-3.5 Turbo: Fastest and most economical for simple tasks
-    "gpt-3.5-turbo": {
-        "input": 0.50,   # Very economical for straightforward analysis
-        "output": 1.50   # Good value for basic data processing tasks
+    "gpt-4.1-nano": {
+        "input": 0.10,   # Cost per 1M input tokens - fastest and most economical
+        "output": 0.40   # Ideal for classification, autocompletion, and high-volume tasks
+    },
+    
+    # o-Series: Advanced reasoning models with tool use capabilities
+    "o3": {
+        "input": 10.00,  # Cost per 1M input tokens - most advanced reasoning model
+        "output": 40.00  # Excels at complex reasoning, math, coding, and science
+    },
+    
+    "o4-mini": {
+        "input": 1.10,   # Cost per 1M input tokens - cost-effective reasoning
+        "output": 4.40   # Strong reasoning performance at 10x lower cost than o3
     }
 }
 

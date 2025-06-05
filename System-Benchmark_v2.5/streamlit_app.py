@@ -191,18 +191,22 @@ with st.sidebar:
     
     # Available AI models with different capabilities and costs
     available_models = [
-        "gpt-4o-mini",  # Fast and economical
-        "gpt-4o",       # Latest and most capable
-        "gpt-4",        # Previous generation, still very capable
-        "gpt-3.5-turbo" # Fastest and most economical
+        "gpt-4o-mini",   # Reliable and well-tested model, good for testing
+        "gpt-4.1-nano",  # Fastest and most economical option
+        "gpt-4.1-mini",  # Balanced performance and cost
+        "o4-mini",       # Cost-effective reasoning model
+        "gpt-4.1",       # Flagship general-purpose model
+        "o3"             # Most advanced reasoning model
     ]
     
     # Model descriptions to help users choose
     model_descriptions = {
-        "gpt-4o-mini": "Fast and cost-effective, ideal for most data analysis tasks",
-        "gpt-4o": "Latest GPT-4 model with best performance and reasoning capabilities", 
-        "gpt-4": "Previous GPT-4 version, very capable for complex analysis",
-        "gpt-3.5-turbo": "Fastest and most economical option for basic analysis"
+        "gpt-4o-mini": "Reliable and well-established model with 128K context, excellent for testing and general data analysis",
+        "gpt-4.1-nano": "Fastest and most economical model with 1M token context, ideal for classification and autocompletion",
+        "gpt-4.1-mini": "Balanced performance and cost with excellent coding abilities and 1M token context",
+        "o4-mini": "Cost-effective reasoning model that excels at math, coding, and complex problem-solving",
+        "gpt-4.1": "Flagship model with superior coding and instruction following, 1M token context window",
+        "o3": "Most advanced reasoning model with tool use capabilities for complex multi-step problems"
     }
     
     # Model selection dropdown
