@@ -54,7 +54,7 @@ from data_science_agents.core.events import (
 
 # Import configuration settings
 from data_science_agents.config.settings import (
-    DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS, MAX_TURNS_SPECIALIST
+    DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS, MAX_TURNS_SPECIALIST, create_model_settings
 )
 from data_science_agents.config.prompts import (
     BUSINESS_UNDERSTANDING_ENHANCED, DATA_UNDERSTANDING_ENHANCED, 
@@ -455,10 +455,8 @@ async def run_multi_agent_analysis(
         with trace("Multi-Agent Data Science Analysis"):
             # === AGENT CREATION ===
             # Create consistent model settings for all agents
-            model_settings = ModelSettings(
-                temperature=DEFAULT_TEMPERATURE,
-                top_p=DEFAULT_TOP_P
-            )
+            model_settings = model_settings = create_model_settings(model)
+
 
             # Create all specialist agents using the factory function
             global _business_understanding_agent, _data_understanding_agent

@@ -3,19 +3,22 @@ data_science_agents/config/settings.py - System Configuration and Pricing
 
 This module centralizes all configuration settings for the data science agent system.
 It provides a single place to manage model settings, analysis limits, file handling,
-and cost calculations. Think of it as the "control panel" for the entire system.
+cost calculations, and observability integrations.
 
 Key Configuration Areas:
-- AI Model Settings: Default models, temperature, and other parameters
+- AI Model Settings: Default models, adaptive model settings based on capabilities
 - Analysis Limits: Turn budgets and execution constraints  
 - File Handling: Supported formats and directory settings
 - Cost Tracking: Current pricing for different AI models
+- Model Compatibility: Automatic handling of model-specific parameter support
+- Observability: Langfuse integration for tracing and monitoring
 - Environment Integration: Reading settings from environment variables
 
 Purpose: This centralized configuration approach ensures:
 - Consistent settings across the entire system
 - Easy adjustment of system parameters
 - Transparent cost calculation based on real pricing
+- Automatic model compatibility handling
 - Environment-specific customization via environment variables
 - Clear separation of configuration from business logic
 
@@ -23,6 +26,7 @@ The settings support both development and production environments, with
 sensible defaults that can be overridden via environment variables.
 """
 import os
+import base64
 
 # =============================================================================
 # AI MODEL CONFIGURATION
@@ -118,6 +122,9 @@ TOKEN_COSTS = {
 }
 
 
+# =============================================================================
+# MODEL COMPATIBILITY AND SETTINGS
+# =============================================================================
 
 def get_model_cost(model_name: str, input_tokens: int = 0, output_tokens: int = 0) -> float:
     """
@@ -164,20 +171,91 @@ def get_model_cost(model_name: str, input_tokens: int = 0, output_tokens: int = 
     return total_cost
 
 
+def create_model_settings(model_name: str, temperature: float = DEFAULT_TEMPERATURE, top_p: float = DEFAULT_TOP_P):
+    """
+    Create ModelSettings appropriate for the specific model type.
+    
+    This function automatically handles the fact that different AI models support
+    different configuration parameters. Reasoning models (o-series) have fixed
+    internal parameters and don't allow temperature/top_p customization, while
+    regular models (GPT-4 series) support these creative control parameters.
+    
+    Model Compatibility:
+        - Reasoning Models (o3, o3-mini, o4-mini): No temperature/top_p support
+        - Regular Models (gpt-4o-mini, gpt-4.1-*): Full parameter support
+    
+    Args:
+        model_name (str): Name of the AI model (e.g., "gpt-4o-mini", "o3-mini")
+        temperature (float): Temperature setting (ignored for reasoning models)
+        top_p (float): Top_p setting (ignored for reasoning models)
+        
+    Returns:
+        ModelSettings: Configured settings appropriate for the model type
+        
+    Purpose:
+        - Prevent "Unsupported parameter" errors from reasoning models
+        - Maintain creative control for models that support it
+        - Provide seamless model switching without code changes
+        - Future-proof against new model types with different capabilities
+        
+    Example Usage:
+        # Works for any model type automatically
+        settings = create_model_settings("o3-mini")      # No temp/top_p
+        settings = create_model_settings("gpt-4o-mini")  # With temp/top_p
+    """
+    from agents import ModelSettings
+    
+    # Define reasoning models that don't support temperature/top_p parameters
+    # These models have their sampling parameters fixed internally for optimal reasoning
+    reasoning_models = {"o3", "o3-mini", "o4-mini"}
+    
+    if model_name in reasoning_models:
+        # Return ModelSettings without sampling parameters for reasoning models
+        # These models are designed to work optimally with their internal settings
+        return ModelSettings()
+    else:
+        # Return ModelSettings with full parameter control for regular models
+        # This allows fine-tuning creativity vs consistency for standard models
+        return ModelSettings(
+            temperature=temperature,
+            top_p=top_p
+        )
 
-import os
-import base64
 
-# Replace with your actual Langfuse keys
-os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-bc93054c-8067-4c30-9923-ada269c6ec43"  
-os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-eed57bac-ee32-49cd-9d96-488408c3602c"  
-os.environ["LANGFUSE_HOST"] = "https://cloud.langfuse.com" 
+# =============================================================================
+# OBSERVABILITY AND MONITORING INTEGRATION
+# =============================================================================
+# Langfuse integration for comprehensive tracing, monitoring, and debugging
 
-# Build Basic Auth header
-LANGFUSE_AUTH = base64.b64encode(
-    f"{os.environ.get('LANGFUSE_PUBLIC_KEY')}:{os.environ.get('LANGFUSE_SECRET_KEY')}".encode()
-).decode()
+# Langfuse Configuration for Production Observability
+# Langfuse provides comprehensive tracing of AI agent interactions, enabling:
+# - Real-time monitoring of agent performance and costs
+# - Detailed conversation traces for debugging and optimization
+# - Usage analytics and performance metrics
+# - Integration with OpenTelemetry for enterprise monitoring
 
-# Configure OpenTelemetry endpoint & headers
-os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = os.environ.get("LANGFUSE_HOST") + "/api/public/otel"
-os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = f"Authorization=Basic {LANGFUSE_AUTH}"
+# Langfuse API credentials - loaded from .env file
+LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY")
+LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY") 
+LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+
+# Set Langfuse environment variables for SDK integration
+if LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY:
+    os.environ["LANGFUSE_PUBLIC_KEY"] = LANGFUSE_PUBLIC_KEY
+    os.environ["LANGFUSE_SECRET_KEY"] = LANGFUSE_SECRET_KEY
+    os.environ["LANGFUSE_HOST"] = LANGFUSE_HOST
+    
+# Configure OpenTelemetry integration for enterprise monitoring
+    # This enables Langfuse to receive traces via the OpenTelemetry protocol
+    LANGFUSE_AUTH = base64.b64encode(
+        f"{LANGFUSE_PUBLIC_KEY}:{LANGFUSE_SECRET_KEY}".encode()
+    ).decode()
+    
+    # OpenTelemetry endpoint configuration for trace export
+    os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = f"{LANGFUSE_HOST}/api/public/otel"
+    os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = f"Authorization=Basic {LANGFUSE_AUTH}"
+else:
+    LANGFUSE_AUTH = None
+    # Disable OpenTelemetry export if no Langfuse credentials
+    os.environ.pop("OTEL_EXPORTER_OTLP_ENDPOINT", None)
+    os.environ.pop("OTEL_EXPORTER_OTLP_HEADERS", None)

@@ -54,7 +54,7 @@ from data_science_agents.core.events import (
 # Import configuration settings
 from data_science_agents.config.prompts import SINGLE_AGENT_ENHANCED
 from data_science_agents.config.settings import (
-    DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS_SINGLE
+    DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS_SINGLE, create_model_settings
 )
 
 
@@ -132,10 +132,7 @@ async def run_single_agent_analysis(
             data_science_agent = Agent(
                 name="Data Science Agent",
                 model=model,
-                model_settings=ModelSettings(
-                    temperature=DEFAULT_TEMPERATURE,  # Balanced creativity vs consistency
-                    top_p=DEFAULT_TOP_P               # Token sampling strategy
-                ),
+                model_settings=create_model_settings(model),
                 instructions=SINGLE_AGENT_ENHANCED,   # Comprehensive analysis prompts
                 tools=[execute_code]                  # Python execution capability
             )
