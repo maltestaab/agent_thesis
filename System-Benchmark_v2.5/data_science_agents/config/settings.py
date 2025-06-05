@@ -89,12 +89,7 @@ TOKEN_COSTS = {
         "output": 0.60   # Well-established performance with 128K context window
     },
     
-    # GPT-4.1 Series: Latest general-purpose models with 1M token context
-    "gpt-4.1": {
-        "input": 2.00,   # Cost per 1M input tokens - flagship model with best performance
-        "output": 8.00   # Advanced coding and instruction following capabilities
-    },
-    
+    # GPT-4.1 Series: General-purpose models with 1M token context
     "gpt-4.1-mini": {
         "input": 0.40,   # Cost per 1M input tokens - balanced performance and cost
         "output": 1.60   # Nearly matches full GPT-4.1 performance at lower cost
@@ -111,11 +106,17 @@ TOKEN_COSTS = {
         "output": 40.00  # Excels at complex reasoning, math, coding, and science
     },
     
+    "o3-mini": {
+        "input": 1.10,   # Cost per 1M input tokens - advanced model for STEM and reasoning tasks
+        "output": 4.40   # Flexible reasoning levels (low/medium/high), great coding performance
+    },
+    
     "o4-mini": {
         "input": 1.10,   # Cost per 1M input tokens - cost-effective reasoning
         "output": 4.40   # Strong reasoning performance at 10x lower cost than o3
     }
 }
+
 
 
 def get_model_cost(model_name: str, input_tokens: int = 0, output_tokens: int = 0) -> float:
@@ -161,3 +162,22 @@ def get_model_cost(model_name: str, input_tokens: int = 0, output_tokens: int = 
     total_cost = (input_tokens * costs["input"] + output_tokens * costs["output"]) / 1_000_000
     
     return total_cost
+
+
+
+import os
+import base64
+
+# Replace with your actual Langfuse keys
+os.environ["LANGFUSE_PUBLIC_KEY"] = "pk-lf-bc93054c-8067-4c30-9923-ada269c6ec43"  
+os.environ["LANGFUSE_SECRET_KEY"] = "sk-lf-eed57bac-ee32-49cd-9d96-488408c3602c"  
+os.environ["LANGFUSE_HOST"] = "https://cloud.langfuse.com" 
+
+# Build Basic Auth header
+LANGFUSE_AUTH = base64.b64encode(
+    f"{os.environ.get('LANGFUSE_PUBLIC_KEY')}:{os.environ.get('LANGFUSE_SECRET_KEY')}".encode()
+).decode()
+
+# Configure OpenTelemetry endpoint & headers
+os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = os.environ.get("LANGFUSE_HOST") + "/api/public/otel"
+os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = f"Authorization=Basic {LANGFUSE_AUTH}"

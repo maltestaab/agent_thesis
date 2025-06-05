@@ -24,6 +24,16 @@ The multi-agent approach offers:
 - Detailed transparency into each phase of work
 - Scalable architecture for adding new specialists
 """
+import nest_asyncio
+import logfire
+
+nest_asyncio.apply()
+
+logfire.configure(
+    service_name='your-multi-agent-service',
+    send_to_logfire=False,
+)
+logfire.instrument_openai_agents()
 
 import time
 import streamlit as st

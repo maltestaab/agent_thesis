@@ -195,19 +195,20 @@ with st.sidebar:
         "gpt-4.1-nano",  # Fastest and most economical option
         "gpt-4.1-mini",  # Balanced performance and cost
         "o4-mini",       # Cost-effective reasoning model
-        "gpt-4.1",       # Flagship general-purpose model
+        "o3-mini",       # Advanced reasoning model with flexible reasoning levels
         "o3"             # Most advanced reasoning model
     ]
-    
+
     # Model descriptions to help users choose
     model_descriptions = {
-        "gpt-4o-mini": "Reliable and well-established model with 128K context, excellent for testing and general data analysis",
-        "gpt-4.1-nano": "Fastest and most economical model with 1M token context, ideal for classification and autocompletion",
-        "gpt-4.1-mini": "Balanced performance and cost with excellent coding abilities and 1M token context",
-        "o4-mini": "Cost-effective reasoning model that excels at math, coding, and complex problem-solving",
-        "gpt-4.1": "Flagship model with superior coding and instruction following, 1M token context window",
-        "o3": "Most advanced reasoning model with tool use capabilities for complex multi-step problems"
+        "gpt-4o-mini": "Reliable and well-established model with 128K context, excellent for testing and general data analysis.",
+        "gpt-4.1-nano": "Fastest and most economical model with 1M token context, ideal for classification and autocompletion.",
+        "gpt-4.1-mini": "Balanced performance and cost with excellent coding abilities and 1M token context.",
+        "o4-mini": "Cost-effective reasoning model that excels at math, coding, and complex problem-solving.",
+        "o3-mini": "Advanced reasoning model with flexible reasoning levels (low, medium, high), optimized for STEM tasks and coding.",
+        "o3": "Most advanced reasoning model with tool use capabilities for complex multi-step problems."
     }
+
     
     # Model selection dropdown
     selected_model = st.selectbox(

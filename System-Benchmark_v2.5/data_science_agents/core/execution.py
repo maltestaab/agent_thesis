@@ -36,6 +36,7 @@ import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt
 import seaborn as sns
+import statsmodels.api as sm
 import os
 import sys
 import io
@@ -60,7 +61,8 @@ execution_namespace = {
     'np': np,       # numpy for numerical operations  
     'stats': stats, # scipy.stats for statistical functions
     'plt': plt,     # matplotlib for plotting
-    'sns': sns      # seaborn for statistical visualizations
+    'sns': sns,     # seaborn for statistical visualizations
+    'sm': sm       # statsmodels for statistical modeling
 }
 
 # Global tracking of images created during the current analysis session

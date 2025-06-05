@@ -23,6 +23,16 @@ Key Features:
 - Flexible phase execution based on task requirements
 - Advanced analytics tracking for performance monitoring
 """
+import nest_asyncio
+import logfire
+
+nest_asyncio.apply()
+
+logfire.configure(
+    service_name='your-single-agent-service',
+    send_to_logfire=False,
+)
+logfire.instrument_openai_agents()
 
 import time
 import streamlit as st
