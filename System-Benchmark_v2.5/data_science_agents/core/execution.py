@@ -41,6 +41,11 @@ import os
 import sys
 import io
 import traceback
+import lightgbm as lgb
+import xgboost as xgb
+import catboost as cb
+
+
 from agents import function_tool, RunContextWrapper
 from data_science_agents.config.settings import IMAGES_DIR
 
@@ -62,7 +67,10 @@ execution_namespace = {
     'stats': stats, # scipy.stats for statistical functions
     'plt': plt,     # matplotlib for plotting
     'sns': sns,     # seaborn for statistical visualizations
-    'sm': sm       # statsmodels for statistical modeling
+    'sm': sm,       # statsmodels for statistical modeling
+    'lgb': lgb,     # lightgbm for gradient boosting
+    'xgb': xgb,     # xgboost for gradient boosting
+    'cb': cb       # catboost for gradient boosting
 }
 
 # Global tracking of images created during the current analysis session

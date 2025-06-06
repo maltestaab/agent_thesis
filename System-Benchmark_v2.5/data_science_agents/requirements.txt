@@ -10,3 +10,6 @@ agents
 python-dotenv
 nest-asyncio
 openpyxl
+lightgbm
+xgboost
+catboost
