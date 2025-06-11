@@ -38,7 +38,7 @@ logfire.instrument_openai_agents()
 import time
 import streamlit as st
 import asyncio
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 from openai.types.responses import ResponseTextDeltaEvent
 
 from agents import Agent, Runner, ModelSettings, trace, function_tool, RunContextWrapper
@@ -46,15 +46,14 @@ from agents import Agent, Runner, ModelSettings, trace, function_tool, RunContex
 # Import core system components
 from data_science_agents.core.execution import execute_code, reset_execution_state, get_created_images
 from data_science_agents.core.context import AnalysisContext
-from data_science_agents.core.analytics import setup_analytics, analytics_context, create_analytics_summary_event
+from data_science_agents.core.analytics import setup_analytics, create_analytics_summary_event
 from data_science_agents.core.events import (
-    create_analysis_start_event, create_analysis_complete_event, 
-    create_error_event, create_cancellation_event, create_event
+    create_analysis_start_event, create_error_event, create_cancellation_event, create_event
 )
 
 # Import configuration settings
 from data_science_agents.config.settings import (
-    DEFAULT_MODEL, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, MAX_TURNS, MAX_TURNS_SPECIALIST, create_model_settings
+    DEFAULT_MODEL, MAX_TURNS, MAX_TURNS_SPECIALIST, create_model_settings
 )
 from data_science_agents.config.prompts import (
     BUSINESS_UNDERSTANDING_ENHANCED, DATA_UNDERSTANDING_ENHANCED, 

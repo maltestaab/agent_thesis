@@ -18,8 +18,6 @@ The prompts are structured in layers:
 3. Specialist Instructions: Role-specific guidance for expert agents
 4. Complete Agent Definitions: Fully assembled prompts for each agent type
 
-This system enables consistent, high-quality data science work while allowing
-agents to adapt their approach to specific problems and datasets.
 """
 
 

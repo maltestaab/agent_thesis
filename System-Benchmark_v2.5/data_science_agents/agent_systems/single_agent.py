@@ -39,7 +39,7 @@ import streamlit as st
 from typing import AsyncGenerator
 from openai.types.responses import ResponseTextDeltaEvent
 
-from agents import Agent, Runner, ModelSettings, trace, ItemHelpers
+from agents import Agent, Runner, trace, ItemHelpers
 
 # Import core system components
 from data_science_agents.core.execution import execute_code, reset_execution_state, get_created_images

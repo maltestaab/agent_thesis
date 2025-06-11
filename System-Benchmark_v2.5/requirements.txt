@@ -1,11 +1,35 @@
+# Core Web Framework
+streamlit>=1.32.0
+
+# Data Science Core Libraries
 pandas>=2.2.0
 numpy>=1.26.0
 scipy>=1.12.0
 scikit-learn>=1.4.0
+
+# Visualization
 matplotlib>=3.8.0
 seaborn>=0.13.0
+
+# Statistical Analysis
+statsmodels
+
+# AI and Agents
 openai>=1.12.0
-streamlit>=1.32.0
-agents 
+agents
+
+# Machine Learning Libraries
+lightgbm
+xgboost
+catboost
+
+# File Handling
+openpyxl
+
+# Environment and Async Support
+python-dotenv
+nest-asyncio
+
+# Observability (Optional)
 langfuse
 logfire
